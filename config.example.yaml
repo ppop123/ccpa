@@ -15,4 +15,10 @@ cloaking:
   sensitive-words: []   # words to obfuscate with zero-width spaces
   cache-user-id: false  # cache fake user ID per API key
 
+# Upstream request timeouts
+timeouts:
+  messages-ms: 120000         # non-stream /v1/messages timeout
+  stream-messages-ms: 600000  # stream /v1/messages timeout, suitable for Claude Code long tasks
+  count-tokens-ms: 30000      # /v1/messages/count_tokens timeout
+
 debug: false

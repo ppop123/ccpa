@@ -50,7 +50,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
 
         let upstreamResp: globalThis.Response;
         try {
-          upstreamResp = await callClaudeAPI(account.accessToken, claudeBody, stream);
+          upstreamResp = await callClaudeAPI(account.accessToken, claudeBody, stream, config.timeouts);
         } catch (err: any) {
           manager.recordFailure(account.email, "network", err.message);
           if (config.debug) console.error(`Messages attempt ${attempt + 1} network failure: ${err.message}`);
@@ -159,7 +159,7 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
 
         let upstreamResp: globalThis.Response;
         try {
-          upstreamResp = await callClaudeCountTokens(account.accessToken, req.body);
+          upstreamResp = await callClaudeCountTokens(account.accessToken, req.body, config.timeouts);
         } catch (err: any) {
           manager.recordFailure(account.email, "network", err.message);
           if (config.debug) console.error(`Count tokens attempt ${attempt + 1} network failure: ${err.message}`);

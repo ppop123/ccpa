@@ -1,3 +1,5 @@
+import { TimeoutConfig } from "../config";
+
 const BASE_URL = "https://api.anthropic.com";
 const ANTHROPIC_BETA =
   "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05";
@@ -51,7 +53,8 @@ function buildHeaders(accessToken: string, stream: boolean): Record<string, stri
 export async function callClaudeAPI(
   accessToken: string,
   body: any,
-  stream: boolean
+  stream: boolean,
+  timeouts: TimeoutConfig
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages?beta=true`;
   const headers = buildHeaders(accessToken, stream);
@@ -60,13 +63,14 @@ export async function callClaudeAPI(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(stream ? timeouts["stream-messages-ms"] : timeouts["messages-ms"]),
   });
 }
 
 export async function callClaudeCountTokens(
   accessToken: string,
-  body: any
+  body: any,
+  timeouts: TimeoutConfig
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages/count_tokens?beta=true`;
   const headers = buildHeaders(accessToken, false);
@@ -75,6 +79,6 @@ export async function callClaudeCountTokens(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeouts["count-tokens-ms"]),
   });
 }

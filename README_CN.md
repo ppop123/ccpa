@@ -87,6 +87,17 @@ cloaking:
 debug: false
 ```
 
+如果你要跑较长的 Claude Code 任务，也可以单独配置上游超时：
+
+```yaml
+timeouts:
+  messages-ms: 120000
+  stream-messages-ms: 600000
+  count-tokens-ms: 30000
+```
+
+默认情况下，流式上游请求会允许持续 10 分钟后才会被 auth2api 主动中断。
+
 ## 使用方法
 
 将任意 OpenAI 兼容客户端指向 `http://127.0.0.1:8317`：

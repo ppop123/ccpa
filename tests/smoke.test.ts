@@ -27,6 +27,11 @@ function makeConfig(authDir: string): Config {
       "sensitive-words": [],
       "cache-user-id": false,
     },
+    timeouts: {
+      "messages-ms": 120000,
+      "stream-messages-ms": 600000,
+      "count-tokens-ms": 30000,
+    },
     debug: false,
   };
 }

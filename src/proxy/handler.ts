@@ -59,7 +59,7 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
 
         let upstreamResp: globalThis.Response;
         try {
-          upstreamResp = await callClaudeAPI(account.accessToken, claudeBody, stream);
+          upstreamResp = await callClaudeAPI(account.accessToken, claudeBody, stream, config.timeouts);
         } catch (err: any) {
           manager.recordFailure(account.email, "network", err.message);
           if (config.debug) console.error(`Attempt ${attempt + 1} network failure: ${err.message}`);

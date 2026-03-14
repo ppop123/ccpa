@@ -87,6 +87,17 @@ cloaking:
 debug: false
 ```
 
+Timeouts can also be configured if you run long Claude Code tasks:
+
+```yaml
+timeouts:
+  messages-ms: 120000
+  stream-messages-ms: 600000
+  count-tokens-ms: 30000
+```
+
+By default, streaming upstream requests are allowed to run for 10 minutes before auth2api aborts them.
+
 ## Usage
 
 Use any OpenAI-compatible client pointed at `http://127.0.0.1:8317`:

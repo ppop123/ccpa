@@ -10,12 +10,19 @@ export interface CloakingConfig {
   "cache-user-id": boolean;
 }
 
+export interface TimeoutConfig {
+  "messages-ms": number;
+  "stream-messages-ms": number;
+  "count-tokens-ms": number;
+}
+
 export interface Config {
   host: string;
   port: number;
   "auth-dir": string;
   "api-keys": string[];
   cloaking: CloakingConfig;
+  timeouts: TimeoutConfig;
   debug: boolean;
 }
 
@@ -29,6 +36,11 @@ const DEFAULT_CONFIG: Config = {
     "strict-mode": false,
     "sensitive-words": [],
     "cache-user-id": false,
+  },
+  timeouts: {
+    "messages-ms": 120000,
+    "stream-messages-ms": 600000,
+    "count-tokens-ms": 30000,
   },
   debug: false,
 };
@@ -58,6 +70,7 @@ export function loadConfig(configPath?: string): Config {
       ...DEFAULT_CONFIG,
       ...parsed,
       cloaking: { ...DEFAULT_CONFIG.cloaking, ...(parsed.cloaking || {}) },
+      timeouts: { ...DEFAULT_CONFIG.timeouts, ...(parsed.timeouts || {}) },
     };
   }
 
