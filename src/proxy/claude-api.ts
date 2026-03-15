@@ -19,7 +19,7 @@ function getStainlessOs(): string {
   return "Linux";
 }
 
-function buildHeaders(accessToken: string, stream: boolean): Record<string, string> {
+function buildHeaders(accessToken: string, stream: boolean, timeoutMs: number): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
@@ -35,7 +35,7 @@ function buildHeaders(accessToken: string, stream: boolean): Record<string, stri
     "X-Stainless-Package-Version": "0.74.0",
     "X-Stainless-Arch": getStainlessArch(),
     "X-Stainless-Os": getStainlessOs(),
-    "X-Stainless-Timeout": "600",
+    "X-Stainless-Timeout": String(Math.max(1, Math.ceil(timeoutMs / 1000))),
     "X-Stainless-Retry-Count": "0",
   };
 
@@ -57,13 +57,14 @@ export async function callClaudeAPI(
   timeouts: TimeoutConfig
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages?beta=true`;
-  const headers = buildHeaders(accessToken, stream);
+  const timeoutMs = stream ? timeouts["stream-messages-ms"] : timeouts["messages-ms"];
+  const headers = buildHeaders(accessToken, stream, timeoutMs);
 
   return fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(stream ? timeouts["stream-messages-ms"] : timeouts["messages-ms"]),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -73,7 +74,7 @@ export async function callClaudeCountTokens(
   timeouts: TimeoutConfig
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages/count_tokens?beta=true`;
-  const headers = buildHeaders(accessToken, false);
+  const headers = buildHeaders(accessToken, false, timeouts["count-tokens-ms"]);
 
   return fetch(url, {
     method: "POST",

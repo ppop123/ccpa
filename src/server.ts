@@ -7,6 +7,16 @@ import { createChatCompletionsHandler } from "./proxy/handler";
 import { createMessagesHandler, createCountTokensHandler } from "./proxy/passthrough";
 import { createResponsesHandler } from "./proxy/responses";
 
+const SUPPORTED_MODELS = [
+  "claude-opus-4-6",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+  "claude-haiku-4-5",
+  "opus",
+  "sonnet",
+  "haiku",
+] as const;
+
 // Timing-safe API key comparison
 function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -104,23 +114,9 @@ export function createServer(config: Config, manager: AccountManager): express.A
   app.post("/v1/messages", createMessagesHandler(config, manager));
 
   app.get("/v1/models", (_req, res) => {
-    const models = [
-      "claude-opus-4-6",
-      "claude-sonnet-4-6",
-      "claude-haiku-4-5-20251001",
-      "claude-haiku-4-5",
-      // Convenience aliases
-      "opus",
-      "sonnet",
-      "haiku",
-      // Canonical aliases exposed by Anthropic docs
-      "claude-haiku-4-5",
-      "claude-opus-4-6",
-      "claude-sonnet-4-6",
-    ];
     res.json({
       object: "list",
-      data: models.map((id) => ({
+      data: SUPPORTED_MODELS.map((id) => ({
         id,
         object: "model",
         created: Math.floor(Date.now() / 1000),
