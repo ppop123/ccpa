@@ -1,17 +1,21 @@
-# auth2api
+# ccpa
+
+Claude + Codex Proxy API
 
 [English](./README.md)
 
 一个轻量级的双 provider API 代理，适合 Claude Code 和 OpenAI 兼容客户端。
 
-auth2api 的定位很克制，也很明确：
+`ccpa` 是仓库和项目名，源码里的运行时包名暂时仍然是 `auth2api`，所以你在日志、命令和自动生成配置里仍然会看到这个旧名字。
+
+ccpa 的定位很克制，也很明确：
 
 - 最多一个 Claude OAuth 账号
 - 一个从 `codex.auth-file` 或本地回退路径 `~/.codex/auth.json` 自动发现的 Codex 登录态
 - 一个本地或自托管代理
 - 一个目标：把本地 Claude/Codex 登录态变成可调用的 API
 
-它依然不打算做成多账号池，也不是大型路由平台。如果你想要的是一个体积小、容易理解、方便自己改的代理，auth2api 就是为这个场景准备的。
+它依然不打算做成多账号池，也不是大型路由平台。如果你想要的是一个体积小、容易理解、方便自己改的代理，ccpa 就是为这个场景准备的。
 
 ## 功能特性
 
@@ -35,8 +39,8 @@ auth2api 的定位很克制，也很明确：
 ## 安装
 
 ```bash
-git clone https://github.com/AmazingAng/auth2api
-cd auth2api
+git clone https://github.com/ppop123/ccpa
+cd ccpa
 npm install
 npm run build
 ```
@@ -44,10 +48,10 @@ npm run build
 ## 快速开始
 
 1. 复制 `config.example.yaml` 为 `config.yaml`。
-2. 在 `api-keys` 里至少配置一个 API key。
+2. 在 `api-keys` 里至少配置一个正式 API key。
 3. 选择一个或两个 provider：
-   - 只用 Codex：确保本机已经有 Codex 登录态，或先执行 `node dist/index.js --login-codex`，然后配置 `codex.models`。
-   - 使用 Claude：先执行一次 `node dist/index.js --login`。
+   - 只用 Codex：确保本机已经有 Codex 登录态，或先执行 `npm run login:codex`，然后配置 `codex.models`。
+   - 使用 Claude：先执行一次 `npm run login`。
 4. 执行 `node dist/index.js` 启动服务。
 
 如果你一开始只启用了 Codex，那么像 `/v1/messages` 这类 Claude 原生接口在完成 Claude 登录前仍然不可用。
@@ -90,7 +94,7 @@ node dist/index.js
 
 默认监听地址为 `http://127.0.0.1:8317`。首次启动时，如果 `config.yaml` 中没有配置 API key，会自动生成并写入该文件。
 
-自动生成的 key 使用正式的 `sk-...` 格式，包含 32 字节随机值。只要不是临时本地测试，建议你在 `config.yaml` 里换成自己维护的长随机 key。
+自动生成的 key 使用正式的 `sk-...` 格式，包含 32 字节随机值。只要不是临时本地测试，建议你在 `config.yaml` 里替换成自己维护的长随机 key。
 
 只要任一 provider 可用，进程就可以启动：
 
@@ -197,6 +201,33 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   }'
 ```
 
+如果你用的是 OpenAI Python SDK，也可以直接把 `base_url` 指到本机：
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-sk-...",
+    base_url="http://127.0.0.1:8317/v1",
+)
+
+resp = client.chat.completions.create(
+    model="gpt-5.4",
+    messages=[{"role": "user", "content": "Reply with ok."}],
+)
+
+print(resp.choices[0].message.content)
+```
+
+仓库里还带了一个给本机脚本直接调用的包装脚本：
+
+```bash
+./scripts/call_ccpa.sh gpt-5.4 "Reply with ok."
+./scripts/call_ccpa.sh claude-sonnet-4-6 "Reply with ok."
+```
+
+这个脚本会自动读取 `config.yaml`，拿到 `api-keys[0]`，然后调用本机 `chat/completions` 接口。
+
 ### 支持的模型
 
 auth2api 内置的 Claude 模型：
@@ -276,7 +307,11 @@ Claude token 存储仍然保持单账号模式：
 - 如果本地已保存的是另一个账号，auth2api 会拒绝覆盖，并要求你先删除旧 token
 - 如果 token 目录中存在多个 token 文件，auth2api 会直接报错并退出，直到你清理多余文件
 
-Codex 认证是独立的：auth2api 只读取本机 `~/.codex/auth.json`，不负责 Codex 登录管理。
+Codex 认证和 Claude token 存储是独立的：
+
+- 可以通过 `--login-codex` 由 auth2api 触发 `codex login`
+- 运行时优先读取 `codex.auth-file`
+- 如果配置路径不存在，再回退读取本机 `~/.codex/auth.json`
 
 ## 管理状态
 
@@ -310,6 +345,14 @@ curl "http://127.0.0.1:8317/admin/usage/recent?limit=20" \
 - `claude.available`：当前 Claude 账号是否可用
 - `codex.available`：Codex 认证和模型配置是否可用
 - `codex.details.error`：Codex 当前不可用的具体原因，例如认证文件缺失或模型配置为空
+
+`/admin/usage` 里比较有用的字段：
+
+- `totalRequests`：当前进程启动以来累计请求数
+- `providers`：按 provider 聚合的请求量和失败量
+- `endpoints`：按接口聚合的请求量
+- `models`：按模型聚合的请求量
+- `recent`：最近请求摘要，包含 provider、model、状态码和耗时
 
 ## Smoke 测试
 

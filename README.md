@@ -1,17 +1,21 @@
-# auth2api
+# ccpa
+
+Claude + Codex Proxy API
 
 [中文](./README_CN.md)
 
 A lightweight dual-provider API proxy for Claude Code and OpenAI-compatible clients.
 
-auth2api is intentionally small and focused:
+`ccpa` is the repository/project name. The runtime package name in the source code is still `auth2api`, so you may still see that name in logs, commands, or generated config.
+
+ccpa is intentionally small and focused:
 
 - one Claude OAuth account at most
 - one Codex login discovered from `codex.auth-file` or the local fallback `~/.codex/auth.json`
 - one local or self-hosted proxy
 - one simple goal: turn local Claude/Codex auth into usable API endpoints
 
-It is still intentionally not a multi-account pool or a large routing platform. If you want a compact, understandable proxy that is easy to run and modify, auth2api is built for that use case.
+It is still intentionally not a multi-account pool or a large routing platform. If you want a compact, understandable proxy that is easy to run and modify, ccpa is built for that use case.
 
 ## Features
 
@@ -35,8 +39,8 @@ It is still intentionally not a multi-account pool or a large routing platform. 
 ## Installation
 
 ```bash
-git clone https://github.com/AmazingAng/auth2api
-cd auth2api
+git clone https://github.com/ppop123/ccpa
+cd ccpa
 npm install
 npm run build
 ```
@@ -44,10 +48,10 @@ npm run build
 ## Quick start
 
 1. Copy `config.example.yaml` to `config.yaml`.
-2. Set at least one API key under `api-keys`.
+2. Set at least one real API key under `api-keys`.
 3. Pick one or both providers:
-   - Codex only: either make sure a local Codex auth file already exists, or run `node dist/index.js --login-codex`, then set `codex.models`.
-   - Claude: run `node dist/index.js --login` once.
+   - Codex only: either make sure a local Codex auth file already exists, or run `npm run login:codex`, then set `codex.models`.
+   - Claude: run `npm run login` once.
 4. Start the server with `node dist/index.js`.
 
 If you start with Codex only, Claude routes such as `/v1/messages` remain unavailable until you complete the Claude login flow.
@@ -90,7 +94,7 @@ node dist/index.js
 
 The server starts on `http://127.0.0.1:8317` by default. On first run, an API key is auto-generated and saved to `config.yaml`.
 
-Generated keys use the `sk-...` format with 32 random bytes. For anything beyond throwaway local testing, set your own long random key in `config.yaml`.
+Generated keys use the `sk-...` format with 32 random bytes. For anything beyond throwaway local testing, replace them with your own long random key in `config.yaml`.
 
 The process can start with either provider:
 
@@ -197,6 +201,33 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   }'
 ```
 
+Example with the OpenAI Python SDK:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-sk-...",
+    base_url="http://127.0.0.1:8317/v1",
+)
+
+resp = client.chat.completions.create(
+    model="gpt-5.4",
+    messages=[{"role": "user", "content": "Reply with ok."}],
+)
+
+print(resp.choices[0].message.content)
+```
+
+For local shell scripts, a helper wrapper is included:
+
+```bash
+./scripts/call_ccpa.sh gpt-5.4 "Reply with ok."
+./scripts/call_ccpa.sh claude-sonnet-4-6 "Reply with ok."
+```
+
+It reads `config.yaml`, extracts `api-keys[0]`, and calls the local `chat/completions` endpoint for you.
+
 ### Available models
 
 Claude models built into auth2api:
@@ -276,7 +307,11 @@ Claude token storage remains single-account mode:
 - If a different account is already stored, auth2api refuses to overwrite it and asks you to remove the existing token first.
 - If more than one token file exists in the auth directory, auth2api exits with an error until you clean up the extra files.
 
-Codex auth is separate: auth2api only reads the local `~/.codex/auth.json` file and does not manage Codex login itself.
+Codex auth is separate from Claude account storage:
+
+- auth2api can trigger `codex login` with `--login-codex`
+- runtime reads `codex.auth-file` first
+- if that file is missing, it falls back to the local `~/.codex/auth.json`
 
 ## Admin status
 
@@ -310,6 +345,14 @@ Useful fields:
 - `claude.available`: whether a Claude account is currently usable
 - `codex.available`: whether Codex auth plus model configuration is usable
 - `codex.details.error`: why Codex is currently unavailable, for example missing auth file or empty model configuration
+
+Useful usage fields:
+
+- `totalRequests`: total requests seen since process start
+- `providers`: per-provider request and failure counts
+- `endpoints`: per-endpoint counters
+- `models`: per-model counters
+- `recent`: newest-first request summaries, including provider, model, status, and latency
 
 ## Smoke tests
 
