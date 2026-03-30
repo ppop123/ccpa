@@ -143,6 +143,32 @@ test("CodexProvider reports unavailable when auth.json is missing", () => {
   assert.equal(status.available, false);
 });
 
+test("CodexProvider supports only configured models when enabled", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
+  const provider = new CodexProvider(config);
+
+  assert.equal(provider.supportsModel("gpt-5.4"), true);
+  assert.equal(provider.supportsModel("o3"), false);
+});
+
+test("CodexProvider rejects all models when disabled", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const config = {
+    ...makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json")),
+    codex: {
+      enabled: false,
+      "auth-file": path.join(tmpDir, ".codex", "auth.json"),
+      models: ["gpt-5.4"],
+    },
+  };
+  const provider = new CodexProvider(config);
+
+  assert.equal(provider.supportsModel("gpt-5.4"), false);
+  assert.deepEqual(provider.listModels(), []);
+  assert.equal(provider.getStatus().available, false);
+});
+
 test("server exposes Claude and Codex models and provider status", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-"));
   const config = makeConfig(authDir, path.join(authDir, ".codex", "auth.json"));

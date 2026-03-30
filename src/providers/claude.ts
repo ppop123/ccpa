@@ -4,7 +4,6 @@ import { Config } from "../config";
 import { createChatCompletionsHandler } from "../proxy/handler";
 import { createMessagesHandler, createCountTokensHandler } from "../proxy/passthrough";
 import { createResponsesHandler } from "../proxy/responses";
-import { resolveProviderFromModel } from "./router";
 import { Provider, ProviderModel, ProviderStatus } from "./types";
 
 const CLAUDE_MODELS = [
@@ -36,7 +35,16 @@ export class ClaudeProvider implements Provider {
   }
 
   supportsModel(model: string): boolean {
-    return resolveProviderFromModel(model) === this.name;
+    if (typeof model !== "string") {
+      return false;
+    }
+
+    const normalized = model.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    return normalized.startsWith("claude-") || CLAUDE_MODELS.includes(normalized as (typeof CLAUDE_MODELS)[number]);
   }
 
   listModels(): ProviderModel[] {

@@ -164,7 +164,7 @@ Short convenience aliases accepted by auth2api:
 - `sonnet` -> `claude-sonnet-4-6`
 - `haiku` -> `claude-haiku-4-5-20251001`
 
-Codex models are configured explicitly in `config.yaml` under `codex.models`. They are returned by `/v1/models` and routed by prefix.
+Codex models are configured explicitly in `config.yaml` under `codex.models`. Only models listed there are returned by `/v1/models` and accepted at runtime.
 
 ### Endpoints
 

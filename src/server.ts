@@ -55,12 +55,35 @@ export function createServer(config: Config, manager: AccountManager): express.A
       codexHandler: express.RequestHandler
     ): express.RequestHandler =>
     (req, res, next) => {
-      const provider = resolveProviderFromModel(req.body?.model);
+      const model = req.body?.model;
+      const provider = resolveProviderFromModel(model);
+
       if (provider === "codex") {
+        if (!codexProvider.supportsModel(model)) {
+          res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
+          return;
+        }
         codexHandler(req, res, next);
         return;
       }
-      claudeHandler(req, res, next);
+
+      if (provider === "claude") {
+        claudeHandler(req, res, next);
+        return;
+      }
+
+      if (claudeProvider.supportsModel(model)) {
+        claudeHandler(req, res, next);
+        return;
+      }
+
+      if (codexProvider.supportsModel(model)) {
+        codexHandler(req, res, next);
+        return;
+      }
+
+      res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
+      return;
     };
 
   app.use(express.json({ limit: config["body-limit"] }));

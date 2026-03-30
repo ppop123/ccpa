@@ -105,3 +105,18 @@ test("allows startup when Claude auth is available even if Codex auth is missing
     fs.rmSync(authDir, { recursive: true, force: true });
   }
 });
+
+test("rejects startup when Codex auth exists but no Codex models are configured", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
+
+  try {
+    writeCodexAuth(authDir);
+    const manager = loadManager(authDir);
+    const config = makeConfig(authDir);
+    config.codex.models = [];
+
+    assert.equal(canStartServer(config, manager), false);
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});

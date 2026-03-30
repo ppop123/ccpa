@@ -164,7 +164,7 @@ auth2api 额外支持以下便捷别名：
 - `sonnet` -> `claude-sonnet-4-6`
 - `haiku` -> `claude-haiku-4-5-20251001`
 
-Codex 模型通过 `config.yaml` 里的 `codex.models` 显式配置，并由 `/v1/models` 返回。
+Codex 模型通过 `config.yaml` 里的 `codex.models` 显式配置；只有列在其中的模型才会由 `/v1/models` 返回并在运行时被接受。
 
 ### 接口列表
 

@@ -12,10 +12,8 @@ const DEFAULT_CODEX_CONFIG = {
   models: [] as string[],
 };
 
-function notImplementedHandler(message: string): express.RequestHandler {
-  return (_req, res) => {
-    res.status(501).json({ error: { message } });
-  };
+function normalizeModelId(model: string): string {
+  return model.trim().toLowerCase();
 }
 
 export class CodexProvider implements Provider {
@@ -34,7 +32,18 @@ export class CodexProvider implements Provider {
   }
 
   supportsModel(model: string): boolean {
-    return resolveProviderFromModel(model) === this.name;
+    if (!this.codexConfig.enabled || typeof model !== "string") {
+      return false;
+    }
+
+    const normalized = normalizeModelId(model);
+    if (!normalized || resolveProviderFromModel(normalized) !== this.name) {
+      return false;
+    }
+
+    return this.codexConfig.models
+      .map((id) => normalizeModelId(id))
+      .includes(normalized);
   }
 
   listModels(): ProviderModel[] {
@@ -57,6 +66,18 @@ export class CodexProvider implements Provider {
       };
     }
 
+    if (this.codexConfig.models.length === 0) {
+      return {
+        name: this.name,
+        available: false,
+        details: {
+          enabled: true,
+          configured: false,
+          error: "No Codex models configured",
+        },
+      };
+    }
+
     try {
       const snapshot = this.authStore.load();
       return {
@@ -64,6 +85,7 @@ export class CodexProvider implements Provider {
         available: true,
         details: {
           enabled: true,
+          configured: true,
           authMode: snapshot.authMode,
           accountId: snapshot.accountId,
           lastRefresh: snapshot.lastRefresh,
@@ -77,6 +99,7 @@ export class CodexProvider implements Provider {
           available: false,
           details: {
             enabled: true,
+            configured: true,
             error: error.message,
           },
         };
