@@ -52,14 +52,46 @@ function authErrorResponse(message: string): { status: number; body: { error: { 
   };
 }
 
+async function streamCodexResponses(upstreamResp: Response, res: express.Response): Promise<void> {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const reader = upstreamResp.body?.getReader();
+  if (!reader) {
+    res.end();
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let clientDisconnected = false;
+  res.on("close", () => {
+    clientDisconnected = true;
+    reader.cancel().catch(() => {});
+  });
+
+  try {
+    while (!clientDisconnected) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!clientDisconnected && value) {
+        res.write(decoder.decode(value, { stream: true }));
+      }
+    }
+  } finally {
+    if (!clientDisconnected) {
+      res.end();
+    }
+  }
+}
+
 export function createCodexResponsesHandler(authStore: CodexAuthStore): express.RequestHandler {
   return async (req, res): Promise<void> => {
     try {
       const body = req.body || {};
-      if (body.stream) {
-        res.status(501).json({ error: { message: "Codex streaming not implemented yet" } });
-        return;
-      }
+      const stream = !!body.stream;
 
       let snapshot;
       try {
@@ -73,12 +105,17 @@ export function createCodexResponsesHandler(authStore: CodexAuthStore): express.
         throw error;
       }
 
-      const upstreamResp = await callCodexResponses(snapshot.accessToken, body);
+      const upstreamResp = await callCodexResponses(snapshot.accessToken, body, stream);
       if (!upstreamResp.ok) {
         const text = await upstreamResp.text().catch(() => "");
         res.status(upstreamResp.status).json({
           error: { message: text || "Codex upstream request failed" },
         });
+        return;
+      }
+
+      if (stream) {
+        await streamCodexResponses(upstreamResp, res);
         return;
       }
 
@@ -89,4 +126,3 @@ export function createCodexResponsesHandler(authStore: CodexAuthStore): express.
     }
   };
 }
-
