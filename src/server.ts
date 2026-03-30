@@ -4,6 +4,7 @@ import { Config, isDebugLevel } from "./config";
 import { AccountManager } from "./accounts/manager";
 import { extractApiKey } from "./api-key";
 import { ClaudeProvider } from "./providers/claude";
+import { CodexProvider } from "./providers/codex";
 
 // Timing-safe API key comparison
 function safeCompare(a: string, b: string): boolean {
@@ -46,6 +47,7 @@ cleanupTimer.unref();
 export function createServer(config: Config, manager: AccountManager): express.Application {
   const app = express();
   const claudeProvider = new ClaudeProvider(config, manager);
+  const codexProvider = new CodexProvider(config);
 
   app.use(express.json({ limit: config["body-limit"] }));
 
@@ -116,9 +118,10 @@ export function createServer(config: Config, manager: AccountManager): express.A
   app.post("/v1/messages", claudeProvider.handleMessages());
 
   app.get("/v1/models", (_req, res) => {
+    const models = [...claudeProvider.listModels(), ...codexProvider.listModels()];
     res.json({
       object: "list",
-      data: claudeProvider.listModels().map((model) => ({
+      data: models.map((model) => ({
         id: model.id,
         object: "model",
         created: Math.floor(Date.now() / 1000),
@@ -133,9 +136,13 @@ export function createServer(config: Config, manager: AccountManager): express.A
   });
 
   app.get("/admin/accounts", (_req, res) => {
+    const claudeStatus = claudeProvider.getStatus();
+    const codexStatus = codexProvider.getStatus();
     res.json({
       accounts: manager.getSnapshots(),
       account_count: manager.accountCount,
+      claude: claudeStatus,
+      codex: codexStatus,
       generated_at: new Date().toISOString(),
     });
   });
