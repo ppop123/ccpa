@@ -4,37 +4,50 @@ Claude + Codex Proxy API
 
 [English](./README.md)
 
-一个轻量级的双 provider API 代理，适合 Claude Code 和 OpenAI 兼容客户端。
+`ccpa` 是一个本地代理，用来把你机器上已有的 Claude 和 Codex 登录态，变成可供脚本调用的 OpenAI 兼容 HTTP API。
 
-`ccpa` 是仓库和项目名，源码里的运行时包名暂时仍然是 `auth2api`，所以你在日志、命令和自动生成配置里仍然会看到这个旧名字。
+它的目标很单纯：
 
-ccpa 的定位很克制，也很明确：
+- 给你自己的脚本用
+- 用一个本地 `base_url` 同时接 Claude 和 Codex
+- 按 `model` 自动路由
 
-- 最多一个 Claude OAuth 账号
-- 一个从 `codex.auth-file` 或本地回退路径 `~/.codex/auth.json` 自动发现的 Codex 登录态
-- 一个本地或自托管代理
-- 一个目标：把本地 Claude/Codex 登录态变成可调用的 API
+它不是多账号池，不是计费平台，也不是通用网关。
 
-它依然不打算做成多账号池，也不是大型路由平台。如果你想要的是一个体积小、容易理解、方便自己改的代理，ccpa 就是为这个场景准备的。
+仓库名是 `ccpa`，但运行时日志和部分配置路径里仍然会看到旧的内部名字 `auth2api`。
 
-## 功能特性
+## 它能做什么
 
-- **轻量优先**：代码量小、单账号架构、依赖和运行逻辑都尽量简单
-- **Claude + Codex**：一个进程同时服务 Claude OAuth 和本地 Codex 登录态
-- **OpenAI 兼容 API**：支持 `/v1/chat/completions`、`/v1/responses`、`/v1/models`
-- **按模型自动路由**：`claude-*` 走 Claude，`gpt-*` / `o*` / `codex-*` 走 Codex
-- **Claude 原生透传**：支持 `/v1/messages` 与 `/v1/messages/count_tokens`
-- **适配 Claude Code**：兼容 `Authorization: Bearer` 和 `x-api-key`
-- **覆盖核心能力**：支持流式、工具调用、图片与 reasoning，而不引入大型框架
-- **Provider 级状态查看**：`/admin/accounts` 同时暴露 Claude 和 Codex 的可用状态
-- **轻量使用统计**：通过 `/admin/usage` 和 `/admin/usage/recent` 查看内存中的请求统计
-- **默认安全设置**：timing-safe API key 校验、每 IP 限流、仅允许 localhost 浏览器 CORS
+- 一个进程同时服务 Claude 和 Codex
+- 支持 `POST /v1/chat/completions`
+- 支持 `POST /v1/responses`
+- 支持 `GET /v1/models`
+- 支持 Claude 原生 `POST /v1/messages` 和 `POST /v1/messages/count_tokens`
+- 提供 `GET /admin/accounts` 查看 provider 状态
+- 提供 `GET /admin/usage` 和 `GET /admin/usage/recent` 查看内存中的请求统计
 
-## 运行要求
+路由规则很简单：
+
+- `claude-*` -> Claude
+- `gpt-*`、`o*`、`codex-*` -> Codex
+
+## 运行前提
 
 - Node.js 20+
-- 如果要用 Claude 模型，需要一个 Claude 账号（推荐 Claude Max）
-- 如果要用 Codex 模型，需要本机已有 Codex 登录态（`~/.codex/auth.json`），或者本机安装 Codex CLI 以便由 auth2api 代为触发登录
+- 如果要用 Claude，需要 Claude 登录态
+- 如果要用 Codex，需要 Codex 登录态
+
+Claude token 存在 `auth-dir` 目录里。
+
+Codex 登录态优先读取 `codex.auth-file`，如果配置路径不存在，再回退到 `~/.codex/auth.json`。
+
+服务支持三种启动方式：
+
+- 只开 Claude
+- 只开 Codex
+- Claude + Codex 同时开
+
+如果两边都不可用，启动会直接失败。
 
 ## 安装
 
@@ -43,101 +56,26 @@ git clone https://github.com/ppop123/ccpa
 cd ccpa
 npm install
 npm run build
+cp config.example.yaml config.yaml
 ```
 
-## 快速开始
+## 5 分钟跑起来
 
-1. 复制 `config.example.yaml` 为 `config.yaml`。
-2. 在 `api-keys` 里至少配置一个正式 API key。
-3. 选择一个或两个 provider：
-   - 只用 Codex：确保本机已经有 Codex 登录态，或先执行 `npm run login:codex`，然后配置 `codex.models`。
-   - 使用 Claude：先执行一次 `npm run login`。
-4. 执行 `node dist/index.js` 启动服务。
+1. 在 `config.yaml` 里填一个正式 API key。
+2. 在 `codex.models` 里填允许访问的 Codex 模型。
+3. 登录你要用的 provider。
+4. 启动服务。
 
-如果你一开始只启用了 Codex，那么像 `/v1/messages` 这类 Claude 原生接口在完成 Claude 登录前仍然不可用。
-
-## 登录
-
-Claude 模型仍然使用 auth2api 内置的 OAuth 登录流程。Codex 模型既可以直接复用本机现有登录态，也可以通过 auth2api 触发官方 Codex CLI 登录。
-
-### 自动模式（需要本地浏览器）
-
-```bash
-node dist/index.js --login
-```
-
-程序会输出一个浏览器 URL。完成授权后，回调会自动处理。
-
-### 手动模式（适合远程服务器）
-
-```bash
-node dist/index.js --login --manual
-```
-
-在浏览器中打开输出的链接。授权完成后，浏览器会跳转到一个 `localhost` 地址，这个页面可能无法打开；请把地址栏中的完整 URL 复制回终端。
-
-### Codex CLI 登录
-
-```bash
-node dist/index.js --login-codex
-```
-
-这会由 auth2api 调用 `codex login`。如果本机没有安装 Codex CLI，程序会给出明确的安装提示，而不是静默失败。
-
-运行时，auth2api 会先读取 `codex.auth-file`。如果这个路径不存在，会自动回退检查 `~/.codex/auth.json`。
-
-## 启动服务
-
-```bash
-node dist/index.js
-```
-
-默认监听地址为 `http://127.0.0.1:8317`。首次启动时，如果 `config.yaml` 中没有配置 API key，会自动生成并写入该文件。
-
-自动生成的 key 使用正式的 `sk-...` 格式，包含 32 字节随机值。只要不是临时本地测试，建议你在 `config.yaml` 里替换成自己维护的长随机 key。
-
-只要任一 provider 可用，进程就可以启动：
-
-- Claude 可用：先执行 `node dist/index.js --login`
-- Codex 可用：执行 `node dist/index.js --login-codex`、配置可用的 `codex.auth-file`，或使用回退路径 `~/.codex/auth.json`
-
-如果 Claude token 不存在，且 Codex 配置或认证也不可用，auth2api 会在启动时直接退出，而不是带着错误配置继续提供服务。
-
-如果当前只有一边 provider 可用，`/admin/accounts` 会明确显示另一边缺的是什么，以及对应的登录命令。
-
-如果上游因为限流导致当前账号进入 cooldown，auth2api 会返回 `429 Rate limited on the configured account`，而不是通用的 `503`。
-
-## 配置
-
-复制 `config.example.yaml` 为 `config.yaml`，然后按需修改：
+最小配置示例：
 
 ```yaml
-host: ""          # 绑定地址，空字符串表示 127.0.0.1
+host: ""
 port: 8317
 
-auth-dir: "~/.auth2api"   # Claude OAuth token 存储目录
+auth-dir: "~/.auth2api"
 
 api-keys:
-  - "sk-replace-with-a-long-random-key"   # 客户端使用这个 key 访问代理
-
-body-limit: "200mb"       # 最大 JSON 请求体大小，适合大上下文场景
-
-cloaking:
-  mode: "auto"            # auto | always | never
-  strict-mode: false
-  sensitive-words: []
-  cache-user-id: false
-
-debug: "off"            # off | errors | verbose
-```
-
-如果你要跑较长的 Claude Code 任务，也可以单独配置上游超时：
-
-```yaml
-timeouts:
-  messages-ms: 120000
-  stream-messages-ms: 600000
-  count-tokens-ms: 30000
+  - "sk-replace-with-a-long-random-key"
 
 codex:
   enabled: true
@@ -146,49 +84,56 @@ codex:
     - "gpt-5.4"
     - "o3"
     - "codex-mini-latest"
+
+debug: "off"
 ```
 
-默认情况下，流式上游请求会允许持续 10 分钟后才会被 auth2api 主动中断。
+完整配置可以直接看 [config.example.yaml](/Users/wy/auth2api/config.example.yaml)。
 
-默认请求体大小限制现在是 `200mb`，比之前固定的 `20mb` 更适合 Claude Code 的大上下文使用场景。
-
-`/v1/models` 里的 Codex 模型来自 `codex.models` 配置；Claude 模型则是内置列表。
-
-几个关键语义：
-
-- `codex.enabled: false` 会彻底关闭 Codex 路由。
-- `codex.models` 既决定 `/v1/models` 的输出，也决定运行时允许访问的 Codex 模型白名单。
-- `codex.auth-file` 会优先检查；如果该路径不存在，auth2api 还会继续检查 `~/.codex/auth.json`。
-- 如果请求的是 `gpt-*`、`o*`、`codex-*`，但模型不在 `codex.models` 里，会直接返回 `400 Unsupported model`。
-
-`debug` 现在支持三级日志：
-- `off`：不输出额外调试日志
-- `errors`：记录上游/网络失败信息和上游错误响应正文
-- `verbose`：在 `errors` 基础上，再输出每个请求的方法、路径、状态码和耗时
-
-## 使用方法
-
-将任意 OpenAI 兼容客户端指向 `http://127.0.0.1:8317`：
+启动：
 
 ```bash
-curl http://127.0.0.1:8317/v1/chat/completions \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-6",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 1024
-  }'
+node dist/index.js
 ```
 
-`/v1/chat/completions` 和 `/v1/responses` 会按 `model` 自动分流：
+默认地址：
 
-- `claude-*` -> Claude provider
-- `gpt-*`、`o*`、`codex-*` -> Codex provider
+```text
+http://127.0.0.1:8317
+```
 
-不支持或未被允许的模型会返回 `400 Unsupported model`。
+## 登录
 
-Codex 请求示例：
+Claude 登录：
+
+```bash
+npm run login
+```
+
+远程 shell 下手动 Claude 登录：
+
+```bash
+node dist/index.js --login --manual
+```
+
+Codex 登录：
+
+```bash
+npm run login:codex
+```
+
+这会调用官方 `codex login`。如果本机没装 Codex CLI，ccpa 会直接给出安装提示。
+
+如果当前只登录了一边 provider，服务仍然可以启动，只是另一边模型不可用；缺失信息会在 `/admin/accounts` 里直接提示。
+
+## 给脚本调用
+
+把它当成 OpenAI 兼容服务就行：
+
+- `base_url = http://127.0.0.1:8317/v1`
+- `api_key = config.yaml` 里的任意一个 `api-keys`
+
+### curl
 
 ```bash
 curl http://127.0.0.1:8317/v1/chat/completions \
@@ -196,12 +141,12 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-5.4",
-    "messages": [{"role": "user", "content": "Summarize this repo."}],
+    "messages": [{"role": "user", "content": "Reply with ok."}],
     "stream": false
   }'
 ```
 
-如果你用的是 OpenAI Python SDK，也可以直接把 `base_url` 指到本机：
+### OpenAI Python SDK
 
 ```python
 from openai import OpenAI
@@ -212,84 +157,87 @@ client = OpenAI(
 )
 
 resp = client.chat.completions.create(
-    model="gpt-5.4",
+    model="claude-sonnet-4-6",
     messages=[{"role": "user", "content": "Reply with ok."}],
 )
 
 print(resp.choices[0].message.content)
 ```
 
-仓库里还带了一个给本机脚本直接调用的包装脚本：
+### 本机 shell 包装脚本
 
 ```bash
 ./scripts/call_ccpa.sh gpt-5.4 "Reply with ok."
 ./scripts/call_ccpa.sh claude-sonnet-4-6 "Reply with ok."
 ```
 
-这个脚本会自动读取 `config.yaml`，拿到 `api-keys[0]`，然后调用本机 `chat/completions` 接口。
+这个脚本会自动读取 `config.yaml`，拿 `api-keys[0]`，然后请求本机服务。
 
-### 支持的模型
+## 模型规则
 
-auth2api 内置的 Claude 模型：
+内置 Claude 模型：
 
-| 模型 ID | 说明 |
-|--------|------|
-| `claude-opus-4-6` | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | Claude Sonnet 4.6 |
-| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
-| `claude-haiku-4-5` | Claude Haiku 4.5 的别名 |
+- `claude-opus-4-6`
+- `claude-sonnet-4-6`
+- `claude-haiku-4-5-20251001`
+- `claude-haiku-4-5`
 
-auth2api 额外支持以下便捷别名：
+Claude 便捷别名：
 
-- `opus` -> `claude-opus-4-6`
-- `sonnet` -> `claude-sonnet-4-6`
-- `haiku` -> `claude-haiku-4-5-20251001`
+- `opus`
+- `sonnet`
+- `haiku`
 
-Codex 模型通过 `config.yaml` 里的 `codex.models` 显式配置；只有列在其中的模型才会由 `/v1/models` 返回并在运行时被接受。
+Codex 模型只来自 `codex.models`。
 
-### 接口列表
+运行时关键规则：
 
-| Endpoint | 说明 |
-|----------|------|
-| `POST /v1/chat/completions` | OpenAI 兼容聊天接口，按模型自动路由 |
-| `POST /v1/responses` | OpenAI Responses API 兼容接口，按模型自动路由 |
-| `POST /v1/messages` | Claude 原生消息透传，仅 Claude |
-| `POST /v1/messages/count_tokens` | Claude token 计数，仅 Claude |
+- `codex.enabled: false` 会彻底关闭 Codex 路由
+- 不在 `codex.models` 里的 Codex 模型会直接返回 `400 Unsupported model`
+- `/v1/models` 返回 Claude 内置模型加上配置里的 Codex 模型
+
+## 接口
+
+| 接口 | 用途 |
+|------|------|
+| `POST /v1/chat/completions` | OpenAI 兼容聊天接口 |
+| `POST /v1/responses` | OpenAI 兼容 responses 接口 |
+| `POST /v1/messages` | Claude 原生消息接口 |
+| `POST /v1/messages/count_tokens` | Claude 原生 token 计数接口 |
 | `GET /v1/models` | 列出可用模型 |
-| `GET /admin/accounts` | 查看 Claude + Codex provider 状态（需要 API key） |
-| `GET /admin/usage` | 查看按 provider、endpoint、model 聚合的内存请求统计 |
-| `GET /admin/usage/recent` | 查看最近请求摘要，按时间倒序 |
+| `GET /admin/accounts` | 查看 provider 可用性和登录提示 |
+| `GET /admin/usage` | 查看聚合使用统计 |
+| `GET /admin/usage/recent` | 查看最近请求摘要 |
 | `GET /health` | 健康检查 |
 
-## Docker
+`/v1` 和 `/admin` 都需要 API key。
 
-```bash
-# 构建
-docker build -t auth2api .
+## 监控
 
-# 运行（挂载配置文件与 token 目录）
-docker run -d \
-  -p 8317:8317 \
-  -v ~/.auth2api:/data \
-  -v ./config.yaml:/config/config.yaml \
-  auth2api
-```
+`/admin/accounts` 用来判断 Claude 和 Codex 当前是否可用。
 
-或者使用 docker-compose：
+`/admin/usage` 提供进程启动以来的聚合统计，包括：
 
-```bash
-docker-compose up -d
-```
+- 总请求数
+- 按 provider 统计
+- 按 endpoint 统计
+- 按 model 统计
 
-容器使用注意：
+`/admin/usage/recent` 返回最近请求摘要，最新的在前面。
 
-- 如果你希望 Claude 登录态持久化，建议在 `config.yaml` 里把 `auth-dir` 设成 `"/data"`。
-- 如果你要在 Docker 里使用 Codex，需要把宿主机的 auth 文件挂载到容器内与 `codex.auth-file` 一致的路径，例如 `-v ~/.codex/auth.json:/root/.codex/auth.json:ro`。
-- 如果你改了容器内路径，记得同步修改 `codex.auth-file`。如果配置路径不存在，容器内还会继续回退检查 `/root/.codex/auth.json`。
+这些统计只存在内存里，重启后会清空。
 
-## 与 Claude Code 配合使用
+## 调试
 
-将 `ANTHROPIC_BASE_URL` 指向 auth2api：
+`debug` 支持三档：
+
+- `off`
+- `errors`
+- `verbose`
+
+`verbose` 会输出访问日志；`errors` 只记录上游和网络错误。
+
+## 配合 Claude Code
 
 ```bash
 ANTHROPIC_BASE_URL=http://127.0.0.1:8317 \
@@ -297,73 +245,40 @@ ANTHROPIC_API_KEY=<your-api-key> \
 claude
 ```
 
-Claude Code 使用的是原生 `/v1/messages` 接口，auth2api 会直接透传。`Authorization: Bearer` 与 `x-api-key` 两种认证头都支持。
+Claude Code 走的是原生 `/v1/messages`，ccpa 会直接透传。
 
-## 单账号模式
-
-Claude token 存储仍然保持单账号模式：
-
-- 再次执行 `--login` 时，如果还是同一个账号，会更新已保存的 token
-- 如果本地已保存的是另一个账号，auth2api 会拒绝覆盖，并要求你先删除旧 token
-- 如果 token 目录中存在多个 token 文件，auth2api 会直接报错并退出，直到你清理多余文件
-
-Codex 认证和 Claude token 存储是独立的：
-
-- 可以通过 `--login-codex` 由 auth2api 触发 `codex login`
-- 运行时优先读取 `codex.auth-file`
-- 如果配置路径不存在，再回退读取本机 `~/.codex/auth.json`
-
-## 管理状态
-
-你可以通过 `/admin/accounts` 查看当前账号状态：
+## Docker
 
 ```bash
-curl http://127.0.0.1:8317/admin/accounts \
-  -H "Authorization: Bearer <your-api-key>"
+docker build -t ccpa .
+
+docker run -d \
+  -p 8317:8317 \
+  -v ~/.auth2api:/data \
+  -v ~/.codex/auth.json:/root/.codex/auth.json:ro \
+  -v ./config.yaml:/config/config.yaml \
+  ccpa
 ```
 
-你也可以通过 `/admin/usage` 查看当前内存中的请求统计：
+如果你要把 Claude 登录态持久化到容器里，配置：
 
-```bash
-curl http://127.0.0.1:8317/admin/usage \
-  -H "Authorization: Bearer <your-api-key>"
+```yaml
+auth-dir: "/data"
 ```
 
-通过 `/admin/usage/recent` 查看最近请求摘要：
-
-```bash
-curl "http://127.0.0.1:8317/admin/usage/recent?limit=20" \
-  -H "Authorization: Bearer <your-api-key>"
-```
-
-当前版本的 usage 统计只保存在内存里，进程重启后会清空。
-
-返回内容包含旧版 Claude 账号快照，以及拆开的 `claude`、`codex` provider 状态，便于分别判断哪一侧不可用。
-
-常用字段：
-
-- `claude.available`：当前 Claude 账号是否可用
-- `codex.available`：Codex 认证和模型配置是否可用
-- `codex.details.error`：Codex 当前不可用的具体原因，例如认证文件缺失或模型配置为空
-
-`/admin/usage` 里比较有用的字段：
-
-- `totalRequests`：当前进程启动以来累计请求数
-- `providers`：按 provider 聚合的请求量和失败量
-- `endpoints`：按接口聚合的请求量
-- `models`：按模型聚合的请求量
-- `recent`：最近请求摘要，包含 provider、model、状态码和耗时
+如果你改了容器内 Codex auth 文件路径，也要同步修改 `codex.auth-file`。
 
 ## Smoke 测试
-
-仓库内置了一套最小自动化 smoke test，并使用 mocked upstream response，因此不会调用真实 Claude 或 Codex 服务：
 
 ```bash
 npm run test:smoke
 ```
 
-## 致谢
+这套测试使用 mocked upstream，不会调用真实 Claude 或 Codex。
 
+## Inspired by
+
+- [auth2api](https://github.com/AmazingAng/auth2api)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 - [sub2api](https://github.com/Wei-Shaw/sub2api)
 
