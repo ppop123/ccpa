@@ -5,6 +5,7 @@ import { AccountManager } from "./accounts/manager";
 import { extractApiKey } from "./api-key";
 import { ClaudeProvider } from "./providers/claude";
 import { CodexProvider } from "./providers/codex";
+import { resolveProviderFromModel } from "./providers/router";
 
 // Timing-safe API key comparison
 function safeCompare(a: string, b: string): boolean {
@@ -48,6 +49,19 @@ export function createServer(config: Config, manager: AccountManager): express.A
   const app = express();
   const claudeProvider = new ClaudeProvider(config, manager);
   const codexProvider = new CodexProvider(config);
+  const routeByModel =
+    (
+      claudeHandler: express.RequestHandler,
+      codexHandler: express.RequestHandler
+    ): express.RequestHandler =>
+    (req, res, next) => {
+      const provider = resolveProviderFromModel(req.body?.model);
+      if (provider === "codex") {
+        codexHandler(req, res, next);
+        return;
+      }
+      claudeHandler(req, res, next);
+    };
 
   app.use(express.json({ limit: config["body-limit"] }));
 
@@ -110,8 +124,14 @@ export function createServer(config: Config, manager: AccountManager): express.A
   app.use("/admin", requireApiKey);
 
   // Routes — OpenAI compatible
-  app.post("/v1/chat/completions", claudeProvider.handleChatCompletions());
-  app.post("/v1/responses", claudeProvider.handleResponses());
+  app.post(
+    "/v1/chat/completions",
+    routeByModel(claudeProvider.handleChatCompletions(), codexProvider.handleChatCompletions())
+  );
+  app.post(
+    "/v1/responses",
+    routeByModel(claudeProvider.handleResponses(), codexProvider.handleResponses())
+  );
 
   // Routes — Claude native passthrough
   app.post("/v1/messages/count_tokens", claudeProvider.handleCountTokens());

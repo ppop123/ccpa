@@ -15,6 +15,20 @@ test("codex-mini-latest routes to codex", () => {
   assert.equal(resolveProviderFromModel("codex-mini-latest"), "codex");
 });
 
+test("o3 routes to codex", () => {
+  assert.equal(resolveProviderFromModel("o3"), "codex");
+});
+
+test("o4-mini routes to codex", () => {
+  assert.equal(resolveProviderFromModel("o4-mini"), "codex");
+});
+
+test("invalid model input returns null instead of throwing", () => {
+  assert.equal(resolveProviderFromModel(undefined as unknown as string), null);
+  assert.equal(resolveProviderFromModel(null as unknown as string), null);
+  assert.equal(resolveProviderFromModel({ trim: "nope" } as unknown as string), null);
+});
+
 test("unknown model returns null", () => {
   assert.equal(resolveProviderFromModel("not-a-real-model"), null);
 });
