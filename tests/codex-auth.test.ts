@@ -102,6 +102,56 @@ test("CodexAuthStore reloads when auth.json mtime changes", async () => {
   assert.equal(second.refreshToken, "second-refresh");
 });
 
+test("CodexAuthStore falls back to secondary auth file when primary is missing", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-fallback-"));
+  const primaryAuthFile = path.join(tmpDir, "missing", "auth.json");
+  const fallbackAuthFile = path.join(tmpDir, ".codex", "auth.json");
+  writeJson(fallbackAuthFile, {
+    auth_mode: "chatgpt",
+    tokens: {
+      access_token: "fallback-access-token",
+      refresh_token: "fallback-refresh-token",
+      account_id: "acct_fallback",
+    },
+    last_refresh: "2026-03-30T00:00:00.000Z",
+  });
+
+  const store = new CodexAuthStore(primaryAuthFile, fallbackAuthFile);
+  const snapshot = store.load();
+
+  assert.equal(snapshot.accessToken, "fallback-access-token");
+  assert.equal(snapshot.refreshToken, "fallback-refresh-token");
+  assert.equal(snapshot.accountId, "acct_fallback");
+  assert.equal(snapshot.authMode, "chatgpt");
+  assert.equal(snapshot.path, fallbackAuthFile);
+});
+
+test("CodexAuthStore does not fall back when the primary auth file exists but is invalid", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-invalid-primary-"));
+  const primaryAuthFile = path.join(tmpDir, "primary", "auth.json");
+  const fallbackAuthFile = path.join(tmpDir, ".codex", "auth.json");
+
+  writeJson(primaryAuthFile, {
+    auth_mode: "oauth",
+    tokens: {
+      refresh_token: "missing-access-token",
+      account_id: "acct_primary",
+    },
+  });
+  writeJson(fallbackAuthFile, {
+    auth_mode: "chatgpt",
+    tokens: {
+      access_token: "fallback-access-token",
+      refresh_token: "fallback-refresh-token",
+      account_id: "acct_fallback",
+    },
+  });
+
+  const store = new CodexAuthStore(primaryAuthFile, fallbackAuthFile);
+
+  assert.throws(() => store.load(), /access_token/i);
+});
+
 test("resolveAuthDir still resolves home-based paths", () => {
   const resolved = resolveAuthDir("~/.codex");
   assert.ok(resolved.includes(".codex"));

@@ -84,6 +84,17 @@ function writeCodexAuth(authDir: string): void {
   );
 }
 
+function withHomeDir<T>(homeDir: string, fn: () => T): T {
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
+
+  try {
+    return fn();
+  } finally {
+    process.env.HOME = originalHome;
+  }
+}
+
 async function startApp(config: Config, manager: AccountManager): Promise<http.Server> {
   const app = createServer(config, manager);
   const server = createHttpServer(app);
@@ -470,6 +481,7 @@ test("returns rate limited when the configured account is cooled down", async (t
 
 test("missing Codex auth only breaks Codex models and still allows Claude models", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-home-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input, init) => {
     const url = String(input);
@@ -486,12 +498,13 @@ test("missing Codex auth only breaks Codex models and still allows Claude models
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   });
-  const server = await startApp(makeConfig(authDir), manager);
+  const server = await withHomeDir(tmpHome, () => startApp(makeConfig(authDir), manager));
 
   t.after(async () => {
     restoreFetch();
     await stopApp(server);
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   const codexResp = await requestJson({

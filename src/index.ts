@@ -2,6 +2,7 @@ import crypto from "crypto";
 import readline from "readline";
 import { loadConfig, resolveAuthDir } from "./config";
 import { AccountManager } from "./accounts/manager";
+import { runCodexLogin } from "./auth/codex-login";
 import { generatePKCECodes } from "./auth/pkce";
 import { generateAuthURL, exchangeCodeForTokens } from "./auth/oauth";
 import { waitForCallback } from "./auth/callback-server";
@@ -66,6 +67,12 @@ async function doLogin(authDir: string, manual: boolean): Promise<void> {
   console.log(`Token expires: ${tokenData.expiresAt}`);
 }
 
+async function doCodexLogin(): Promise<void> {
+  console.log("Starting Codex CLI login...");
+  const authFilePath = await runCodexLogin();
+  console.log(`\nCodex login successful! Auth file: ${authFilePath}`);
+}
+
 async function startServer(): Promise<void> {
   const configPath = process.argv.find((a) => a.startsWith("--config="))?.split("=")[1];
   const config = loadConfig(configPath);
@@ -75,7 +82,7 @@ async function startServer(): Promise<void> {
   manager.load();
 
   if (!canStartServer(config, manager)) {
-    console.log("No provider auth found. Run with --login for Claude or ensure Codex auth exists first.");
+    console.log("No provider auth found. Run with --login for Claude or --login-codex for Codex.");
     process.exit(1);
   }
 
@@ -105,7 +112,9 @@ async function main(): Promise<void> {
   const config = loadConfig(configPath);
   const authDir = resolveAuthDir(config["auth-dir"]);
 
-  if (args.includes("--login")) {
+  if (args.includes("--login-codex")) {
+    await doCodexLogin();
+  } else if (args.includes("--login")) {
     const manual = args.includes("--manual");
     await doLogin(authDir, manual);
   } else {

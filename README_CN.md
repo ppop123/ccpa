@@ -7,7 +7,7 @@
 auth2api 的定位很克制，也很明确：
 
 - 最多一个 Claude OAuth 账号
-- 一个直接复用 `~/.codex/auth.json` 的本地 Codex 登录态
+- 一个从 `codex.auth-file` 或本地回退路径 `~/.codex/auth.json` 自动发现的 Codex 登录态
 - 一个本地或自托管代理
 - 一个目标：把本地 Claude/Codex 登录态变成可调用的 API
 
@@ -29,7 +29,7 @@ auth2api 的定位很克制，也很明确：
 
 - Node.js 20+
 - 如果要用 Claude 模型，需要一个 Claude 账号（推荐 Claude Max）
-- 如果要用 Codex 模型，需要本机已有 Codex 登录态（`~/.codex/auth.json`）
+- 如果要用 Codex 模型，需要本机已有 Codex 登录态（`~/.codex/auth.json`），或者本机安装 Codex CLI 以便由 auth2api 代为触发登录
 
 ## 安装
 
@@ -45,7 +45,7 @@ npm run build
 1. 复制 `config.example.yaml` 为 `config.yaml`。
 2. 在 `api-keys` 里至少配置一个 API key。
 3. 选择一个或两个 provider：
-   - 只用 Codex：确保本机已经有 `~/.codex/auth.json`，然后配置 `codex.models`。
+   - 只用 Codex：确保本机已经有 Codex 登录态，或先执行 `node dist/index.js --login-codex`，然后配置 `codex.models`。
    - 使用 Claude：先执行一次 `node dist/index.js --login`。
 4. 执行 `node dist/index.js` 启动服务。
 
@@ -53,7 +53,7 @@ npm run build
 
 ## 登录
 
-Claude 模型仍然使用 auth2api 内置的 OAuth 登录流程。Codex 模型没有单独的登录流程，auth2api 直接复用本机 `~/.codex/auth.json`。
+Claude 模型仍然使用 auth2api 内置的 OAuth 登录流程。Codex 模型既可以直接复用本机现有登录态，也可以通过 auth2api 触发官方 Codex CLI 登录。
 
 ### 自动模式（需要本地浏览器）
 
@@ -71,6 +71,16 @@ node dist/index.js --login --manual
 
 在浏览器中打开输出的链接。授权完成后，浏览器会跳转到一个 `localhost` 地址，这个页面可能无法打开；请把地址栏中的完整 URL 复制回终端。
 
+### Codex CLI 登录
+
+```bash
+node dist/index.js --login-codex
+```
+
+这会由 auth2api 调用 `codex login`。如果本机没有安装 Codex CLI，程序会给出明确的安装提示，而不是静默失败。
+
+运行时，auth2api 会先读取 `codex.auth-file`。如果这个路径不存在，会自动回退检查 `~/.codex/auth.json`。
+
 ## 启动服务
 
 ```bash
@@ -79,12 +89,16 @@ node dist/index.js
 
 默认监听地址为 `http://127.0.0.1:8317`。首次启动时，如果 `config.yaml` 中没有配置 API key，会自动生成并写入该文件。
 
+自动生成的 key 使用正式的 `sk-...` 格式，包含 32 字节随机值。只要不是临时本地测试，建议你在 `config.yaml` 里换成自己维护的长随机 key。
+
 只要任一 provider 可用，进程就可以启动：
 
 - Claude 可用：先执行 `node dist/index.js --login`
-- Codex 可用：本机已有 `~/.codex/auth.json`
+- Codex 可用：执行 `node dist/index.js --login-codex`、配置可用的 `codex.auth-file`，或使用回退路径 `~/.codex/auth.json`
 
 如果 Claude token 不存在，且 Codex 配置或认证也不可用，auth2api 会在启动时直接退出，而不是带着错误配置继续提供服务。
+
+如果当前只有一边 provider 可用，`/admin/accounts` 会明确显示另一边缺的是什么，以及对应的登录命令。
 
 如果上游因为限流导致当前账号进入 cooldown，auth2api 会返回 `429 Rate limited on the configured account`，而不是通用的 `503`。
 
@@ -99,7 +113,7 @@ port: 8317
 auth-dir: "~/.auth2api"   # Claude OAuth token 存储目录
 
 api-keys:
-  - "your-api-key-here"   # 客户端使用这个 key 访问代理
+  - "sk-replace-with-a-long-random-key"   # 客户端使用这个 key 访问代理
 
 body-limit: "200mb"       # 最大 JSON 请求体大小，适合大上下文场景
 
@@ -139,6 +153,7 @@ codex:
 
 - `codex.enabled: false` 会彻底关闭 Codex 路由。
 - `codex.models` 既决定 `/v1/models` 的输出，也决定运行时允许访问的 Codex 模型白名单。
+- `codex.auth-file` 会优先检查；如果该路径不存在，auth2api 还会继续检查 `~/.codex/auth.json`。
 - 如果请求的是 `gpt-*`、`o*`、`codex-*`，但模型不在 `codex.models` 里，会直接返回 `400 Unsupported model`。
 
 `debug` 现在支持三级日志：
@@ -236,7 +251,7 @@ docker-compose up -d
 
 - 如果你希望 Claude 登录态持久化，建议在 `config.yaml` 里把 `auth-dir` 设成 `"/data"`。
 - 如果你要在 Docker 里使用 Codex，需要把宿主机的 auth 文件挂载到容器内与 `codex.auth-file` 一致的路径，例如 `-v ~/.codex/auth.json:/root/.codex/auth.json:ro`。
-- 如果你改了容器内路径，记得同步修改 `codex.auth-file`。
+- 如果你改了容器内路径，记得同步修改 `codex.auth-file`。如果配置路径不存在，容器内还会继续回退检查 `/root/.codex/auth.json`。
 
 ## 与 Claude Code 配合使用
 

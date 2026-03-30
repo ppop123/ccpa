@@ -55,9 +55,21 @@ export class ClaudeProvider implements Provider {
   }
 
   getStatus(): ProviderStatus {
+    if (this.manager.accountCount === 0) {
+      return {
+        name: this.name,
+        available: false,
+        details: {
+          accounts: [],
+          accountCount: 0,
+          hint: "Run `node dist/index.js --login` to make Claude models available.",
+        },
+      };
+    }
+
     return {
       name: this.name,
-      available: this.manager.accountCount > 0,
+      available: true,
       details: {
         accounts: this.manager.getSnapshots(),
         accountCount: this.manager.accountCount,

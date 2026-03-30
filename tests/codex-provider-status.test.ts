@@ -51,6 +51,33 @@ function makeToken(overrides: Partial<TokenData> = {}): TokenData {
   };
 }
 
+function writeCodexAuth(filePath: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify({
+      auth_mode: "chatgpt",
+      last_refresh: new Date().toISOString(),
+      tokens: {
+        access_token: "codex-access-token",
+        refresh_token: "codex-refresh-token",
+        account_id: "acct_codex",
+      },
+    })
+  );
+}
+
+function withHomeDir<T>(homeDir: string, fn: () => T): T {
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
+
+  try {
+    return fn();
+  } finally {
+    process.env.HOME = originalHome;
+  }
+}
+
 function makeManager(authDir: string, tokens: TokenData[]): AccountManager {
   for (const token of tokens) {
     saveToken(authDir, token);
@@ -134,13 +161,47 @@ test("CodexProvider lists configured models", () => {
 
 test("CodexProvider reports unavailable when auth.json is missing", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
-  const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
-  const provider = new CodexProvider(config);
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
 
-  const status = provider.getStatus();
+  try {
+    const status = withHomeDir(tmpHome, () => {
+      const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
+      const provider = new CodexProvider(config);
+      return provider.getStatus();
+    });
 
-  assert.equal(status.name, "codex");
-  assert.equal(status.available, false);
+    assert.equal(status.name, "codex");
+    assert.equal(status.available, false);
+    assert.equal(
+      status.details?.hint,
+      "Run `node dist/index.js --login-codex` or `codex login` to make Codex models available."
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("CodexProvider falls back to the default local Codex auth file", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+
+  try {
+    const fallbackAuthFile = path.join(tmpHome, ".codex", "auth.json");
+    writeCodexAuth(fallbackAuthFile);
+
+    const status = withHomeDir(tmpHome, () => {
+      const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "missing.json"));
+      const provider = new CodexProvider(config);
+      return provider.getStatus();
+    });
+
+    assert.equal(status.available, true);
+    assert.equal(status.details?.path, fallbackAuthFile);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
 });
 
 test("CodexProvider supports only configured models when enabled", () => {
@@ -171,17 +232,19 @@ test("CodexProvider rejects all models when disabled", () => {
 
 test("server exposes Claude and Codex models and provider status", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
   const config = makeConfig(authDir, path.join(authDir, ".codex", "auth.json"));
   const manager = makeManager(authDir, [makeToken()]);
-  const server = await startApp(config, manager);
+  const server = withHomeDir(tmpHome, () => startApp(config, manager));
 
   t.after(async () => {
-    await stopApp(server);
+    await stopApp(await server);
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   const modelsResp = await requestJson({
-    server,
+    server: await server,
     method: "GET",
     path: "/v1/models",
     headers: { Authorization: "Bearer test-key" },
@@ -192,7 +255,7 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
   assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.4"));
 
   const adminResp = await requestJson({
-    server,
+    server: await server,
     method: "GET",
     path: "/admin/accounts",
     headers: { Authorization: "Bearer test-key" },
@@ -202,4 +265,37 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
   assert.equal(adminResp.body.claude.name, "claude");
   assert.equal(adminResp.body.codex.name, "codex");
   assert.equal(adminResp.body.codex.available, false);
+});
+
+test("admin status shows login hints for unavailable providers", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+  const fallbackAuthFile = path.join(tmpHome, ".codex", "auth.json");
+  writeCodexAuth(fallbackAuthFile);
+
+  const config = makeConfig(authDir, path.join(authDir, ".codex", "missing.json"));
+  const manager = makeManager(authDir, []);
+  const server = withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    await stopApp(await server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const adminResp = await requestJson({
+    server: await server,
+    method: "GET",
+    path: "/admin/accounts",
+    headers: { Authorization: "Bearer test-key" },
+  });
+
+  assert.equal(adminResp.status, 200);
+  assert.equal(adminResp.body.claude.available, false);
+  assert.equal(
+    adminResp.body.claude.details.hint,
+    "Run `node dist/index.js --login` to make Claude models available."
+  );
+  assert.equal(adminResp.body.codex.available, true);
+  assert.equal(adminResp.body.codex.details.path, fallbackAuthFile);
 });

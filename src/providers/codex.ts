@@ -1,6 +1,6 @@
 import express from "express";
 import { Config } from "../config";
-import { CodexAuthError, CodexAuthStore } from "./codex-auth";
+import { CodexAuthError, CodexAuthStore, resolveDefaultCodexAuthFile } from "./codex-auth";
 import { createCodexChatCompletionsHandler } from "./codex-chat";
 import { createCodexResponsesHandler } from "./codex-responses";
 import { resolveProviderFromModel } from "./router";
@@ -11,6 +11,9 @@ const DEFAULT_CODEX_CONFIG = {
   "auth-file": "~/.codex/auth.json",
   models: [] as string[],
 };
+
+const CODEX_LOGIN_HINT =
+  "Run `node dist/index.js --login-codex` or `codex login` to make Codex models available.";
 
 function normalizeModelId(model: string): string {
   return model.trim().toLowerCase();
@@ -26,7 +29,10 @@ export class CodexProvider implements Provider {
 
   constructor(private readonly config: Config) {
     this.codexConfig = this.config.codex || DEFAULT_CODEX_CONFIG;
-    this.authStore = new CodexAuthStore(this.codexConfig["auth-file"]);
+    this.authStore = new CodexAuthStore(
+      this.codexConfig["auth-file"],
+      resolveDefaultCodexAuthFile()
+    );
     this.chatHandler = createCodexChatCompletionsHandler(this.authStore);
     this.responsesHandler = createCodexResponsesHandler(this.authStore);
   }
@@ -74,6 +80,7 @@ export class CodexProvider implements Provider {
           enabled: true,
           configured: false,
           error: "No Codex models configured",
+          hint: "Set `codex.models` in config.yaml to expose Codex models.",
         },
       };
     }
@@ -101,6 +108,7 @@ export class CodexProvider implements Provider {
             enabled: true,
             configured: true,
             error: error.message,
+            hint: CODEX_LOGIN_HINT,
           },
         };
       }

@@ -6,7 +6,7 @@ auth-dir: "~/.auth2api"
 
 # API keys for client authentication (clients use these to access this proxy)
 api-keys:
-  - "your-api-key-here"
+  - "sk-replace-with-a-long-random-key"
 
 # Maximum JSON request body size
 body-limit: "200mb"
@@ -24,7 +24,8 @@ timeouts:
   stream-messages-ms: 600000  # stream /v1/messages timeout, suitable for Claude Code long tasks
   count-tokens-ms: 30000      # /v1/messages/count_tokens timeout
 
-# Codex provider settings (reuses local Codex login state)
+# Codex provider settings
+# Use `node dist/index.js --login-codex` or `npm run login:codex` to create the local Codex login state if needed.
 codex:
   enabled: true
   auth-file: "~/.codex/auth.json"

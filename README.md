@@ -7,7 +7,7 @@ A lightweight dual-provider API proxy for Claude Code and OpenAI-compatible clie
 auth2api is intentionally small and focused:
 
 - one Claude OAuth account at most
-- one local Codex login reused from `~/.codex/auth.json`
+- one Codex login discovered from `codex.auth-file` or the local fallback `~/.codex/auth.json`
 - one local or self-hosted proxy
 - one simple goal: turn local Claude/Codex auth into usable API endpoints
 
@@ -29,7 +29,7 @@ It is still intentionally not a multi-account pool or a large routing platform. 
 
 - Node.js 20+
 - A Claude account if you want Claude models (Claude Max subscription recommended)
-- A local Codex login if you want Codex models (`~/.codex/auth.json`)
+- A local Codex login if you want Codex models (`~/.codex/auth.json`), or the Codex CLI if you want auth2api to create one for you
 
 ## Installation
 
@@ -45,7 +45,7 @@ npm run build
 1. Copy `config.example.yaml` to `config.yaml`.
 2. Set at least one API key under `api-keys`.
 3. Pick one or both providers:
-   - Codex only: make sure `~/.codex/auth.json` already exists, then set `codex.models`.
+   - Codex only: either make sure a local Codex auth file already exists, or run `node dist/index.js --login-codex`, then set `codex.models`.
    - Claude: run `node dist/index.js --login` once.
 4. Start the server with `node dist/index.js`.
 
@@ -53,7 +53,7 @@ If you start with Codex only, Claude routes such as `/v1/messages` remain unavai
 
 ## Login
 
-Claude models still use auth2api's built-in OAuth login flow. Codex models do not have a separate login flow here — auth2api reuses the local Codex session from `~/.codex/auth.json`.
+Claude models still use auth2api's built-in OAuth login flow. Codex models can either reuse an existing local session, or trigger the official Codex CLI login from auth2api.
 
 ### Auto mode (requires local browser)
 
@@ -71,6 +71,16 @@ node dist/index.js --login --manual
 
 Open the printed URL in your browser. After authorizing, your browser will redirect to a `localhost` URL that fails to load — copy the full URL from the address bar and paste it back into the terminal.
 
+### Codex CLI login
+
+```bash
+node dist/index.js --login-codex
+```
+
+This runs `codex login` for you. If the Codex CLI is not installed, auth2api prints an install hint instead of failing silently.
+
+At runtime, auth2api reads `codex.auth-file` first. If that path is missing, it falls back to `~/.codex/auth.json`.
+
 ## Starting the server
 
 ```bash
@@ -79,12 +89,16 @@ node dist/index.js
 
 The server starts on `http://127.0.0.1:8317` by default. On first run, an API key is auto-generated and saved to `config.yaml`.
 
+Generated keys use the `sk-...` format with 32 random bytes. For anything beyond throwaway local testing, set your own long random key in `config.yaml`.
+
 The process can start with either provider:
 
 - Claude available via `node dist/index.js --login`
-- Codex available via an existing `~/.codex/auth.json`
+- Codex available via `node dist/index.js --login-codex`, a configured `codex.auth-file`, or the fallback `~/.codex/auth.json`
 
 If neither a Claude token nor a usable Codex configuration is available, auth2api exits at startup instead of serving partial misconfiguration.
+
+When only one provider is available, `/admin/accounts` shows the missing side and the exact login command to enable it.
 
 If the configured Claude account is temporarily cooled down after upstream rate limiting, auth2api now returns `429 Rate limited on the configured account` instead of a generic `503`.
 
@@ -99,7 +113,7 @@ port: 8317
 auth-dir: "~/.auth2api"   # where Claude OAuth tokens are stored
 
 api-keys:
-  - "your-api-key-here"   # clients use this to authenticate
+  - "sk-replace-with-a-long-random-key"   # clients use this to authenticate
 
 body-limit: "200mb"       # maximum JSON request body size, useful for large-context usage
 
@@ -139,6 +153,7 @@ Important routing semantics:
 
 - `codex.enabled: false` disables all Codex routing.
 - `codex.models` is both the `/v1/models` output and the runtime allowlist for Codex requests.
+- `codex.auth-file` is checked first; if it does not exist, auth2api also checks `~/.codex/auth.json`.
 - A `gpt-*`, `o*`, or `codex-*` request for a model not listed in `codex.models` returns `400 Unsupported model`.
 
 `debug` now supports three levels:
@@ -236,7 +251,7 @@ Container notes:
 
 - If you want Claude login persistence in Docker, set `auth-dir: "/data"` in `config.yaml`.
 - If you want Codex models in Docker, mount the host auth file to the same path configured by `codex.auth-file`, for example `-v ~/.codex/auth.json:/root/.codex/auth.json:ro`.
-- If you change the in-container path, update `codex.auth-file` to match.
+- If you change the in-container path, update `codex.auth-file` to match. If the configured path does not exist, auth2api falls back to `/root/.codex/auth.json` inside the container.
 
 ## Use with Claude Code
 

@@ -68,46 +68,64 @@ function loadManager(authDir: string): AccountManager {
   return manager;
 }
 
+function withHomeDir<T>(homeDir: string, fn: () => T): T {
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
+
+  try {
+    return fn();
+  } finally {
+    process.env.HOME = originalHome;
+  }
+}
+
 test("allows startup when Claude is missing but Codex auth is available", () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
 
   try {
     writeCodexAuth(authDir);
     const manager = loadManager(authDir);
 
-    assert.equal(canStartServer(makeConfig(authDir), manager), true);
+    assert.equal(withHomeDir(tmpHome, () => canStartServer(makeConfig(authDir), manager)), true);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("rejects startup when neither Claude nor Codex auth is available", () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
 
   try {
     const manager = loadManager(authDir);
 
-    assert.equal(canStartServer(makeConfig(authDir), manager), false);
+    assert.equal(withHomeDir(tmpHome, () => canStartServer(makeConfig(authDir), manager)), false);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("allows startup when Claude auth is available even if Codex auth is missing", () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
 
   try {
     writeClaudeToken(authDir);
     const manager = loadManager(authDir);
 
-    assert.equal(canStartServer(makeConfig(authDir), manager), true);
+    assert.equal(withHomeDir(tmpHome, () => canStartServer(makeConfig(authDir), manager)), true);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("rejects startup when Codex auth exists but no Codex models are configured", () => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
 
   try {
     writeCodexAuth(authDir);
@@ -115,8 +133,9 @@ test("rejects startup when Codex auth exists but no Codex models are configured"
     const config = makeConfig(authDir);
     config.codex.models = [];
 
-    assert.equal(canStartServer(config, manager), false);
+    assert.equal(withHomeDir(tmpHome, () => canStartServer(config, manager)), false);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });

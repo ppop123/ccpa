@@ -72,6 +72,17 @@ async function stopApp(server: http.Server): Promise<void> {
   });
 }
 
+function withHomeDir<T>(homeDir: string, fn: () => T): T {
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
+
+  try {
+    return fn();
+  } finally {
+    process.env.HOME = originalHome;
+  }
+}
+
 function serverAddress(server: http.Server): AddressInfo {
   const address = server.address();
   if (!address || typeof address === "string") {
@@ -249,20 +260,24 @@ test("Codex responses handler converts system input role to developer", async (t
 
 test("Codex responses handler returns controlled error when auth file is missing", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-missing-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
-  const provider = new CodexProvider(makeConfig(authDir, authFile));
 
   const restoreFetch = global.fetch;
   global.fetch = (async () => {
     throw new Error("Upstream should not be called when auth is missing");
   }) as typeof fetch;
 
-  const server = await startApp(provider.handleResponses());
+  const server = await withHomeDir(tmpHome, async () => {
+    const provider = new CodexProvider(makeConfig(authDir, authFile));
+    return startApp(provider.handleResponses());
+  });
 
   t.after(async () => {
     global.fetch = restoreFetch;
     await stopApp(server);
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   const resp = await requestJson({
@@ -282,6 +297,7 @@ test("Codex responses handler returns controlled error when auth file is missing
 
 test("Codex responses handler returns controlled error when auth file is malformed", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-malformed-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   fs.writeFileSync(
@@ -295,12 +311,15 @@ test("Codex responses handler returns controlled error when auth file is malform
     }, null, 2)
   );
 
-  const provider = new CodexProvider(makeConfig(authDir, authFile));
-  const server = await startApp(provider.handleResponses());
+  const server = await withHomeDir(tmpHome, async () => {
+    const provider = new CodexProvider(makeConfig(authDir, authFile));
+    return startApp(provider.handleResponses());
+  });
 
   t.after(async () => {
     await stopApp(server);
     fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   const resp = await requestJson({
