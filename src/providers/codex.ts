@@ -1,6 +1,7 @@
 import express from "express";
 import { Config } from "../config";
 import { CodexAuthError, CodexAuthStore } from "./codex-auth";
+import { createCodexResponsesHandler } from "./codex-responses";
 import { resolveProviderFromModel } from "./router";
 import { Provider, ProviderModel, ProviderStatus } from "./types";
 
@@ -21,10 +22,12 @@ export class CodexProvider implements Provider {
 
   private readonly authStore: CodexAuthStore;
   private readonly codexConfig;
+  private readonly responsesHandler: express.RequestHandler;
 
   constructor(private readonly config: Config) {
     this.codexConfig = this.config.codex || DEFAULT_CODEX_CONFIG;
     this.authStore = new CodexAuthStore(this.codexConfig["auth-file"]);
+    this.responsesHandler = createCodexResponsesHandler(this.authStore);
   }
 
   supportsModel(model: string): boolean {
@@ -84,6 +87,6 @@ export class CodexProvider implements Provider {
   }
 
   handleResponses(): express.RequestHandler {
-    return notImplementedHandler("Codex responses not implemented");
+    return this.responsesHandler;
   }
 }
