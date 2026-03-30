@@ -3,6 +3,8 @@ import express from "express";
 import { Config, isDebugLevel } from "./config";
 import { AccountManager } from "./accounts/manager";
 import { extractApiKey } from "./api-key";
+import { resolveUsageProvider, wrapTrackedHandler } from "./monitoring/http-usage";
+import { UsageTracker } from "./monitoring/usage";
 import { ClaudeProvider } from "./providers/claude";
 import { CodexProvider } from "./providers/codex";
 import { resolveProviderFromModel } from "./providers/router";
@@ -49,42 +51,64 @@ export function createServer(config: Config, manager: AccountManager): express.A
   const app = express();
   const claudeProvider = new ClaudeProvider(config, manager);
   const codexProvider = new CodexProvider(config);
+  const usageTracker = new UsageTracker();
   const routeByModel =
     (
       claudeHandler: express.RequestHandler,
-      codexHandler: express.RequestHandler
+      codexHandler: express.RequestHandler,
+      endpoint: string
     ): express.RequestHandler =>
-    (req, res, next) => {
-      const model = req.body?.model;
-      const provider = resolveProviderFromModel(model);
+    wrapTrackedHandler(
+      usageTracker,
+      {
+        endpoint,
+        provider: (req) => {
+          const model = req.body?.model;
+          const provider = resolveProviderFromModel(model);
+          if (provider === "claude" || provider === "codex") {
+            return provider;
+          }
+          if (claudeProvider.supportsModel(model)) {
+            return "claude";
+          }
+          if (codexProvider.supportsModel(model)) {
+            return "codex";
+          }
+          return resolveUsageProvider(null);
+        },
+      },
+      (req, res, next) => {
+        const model = req.body?.model;
+        const provider = resolveProviderFromModel(model);
 
-      if (provider === "codex") {
-        if (!codexProvider.supportsModel(model)) {
-          res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
+        if (provider === "codex") {
+          if (!codexProvider.supportsModel(model)) {
+            res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
+            return;
+          }
+          codexHandler(req, res, next);
           return;
         }
-        codexHandler(req, res, next);
+
+        if (provider === "claude") {
+          claudeHandler(req, res, next);
+          return;
+        }
+
+        if (claudeProvider.supportsModel(model)) {
+          claudeHandler(req, res, next);
+          return;
+        }
+
+        if (codexProvider.supportsModel(model)) {
+          codexHandler(req, res, next);
+          return;
+        }
+
+        res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
         return;
       }
-
-      if (provider === "claude") {
-        claudeHandler(req, res, next);
-        return;
-      }
-
-      if (claudeProvider.supportsModel(model)) {
-        claudeHandler(req, res, next);
-        return;
-      }
-
-      if (codexProvider.supportsModel(model)) {
-        codexHandler(req, res, next);
-        return;
-      }
-
-      res.status(400).json({ error: { message: `Unsupported model: ${String(model)}` } });
-      return;
-    };
+    );
 
   app.use(express.json({ limit: config["body-limit"] }));
 
@@ -149,16 +173,38 @@ export function createServer(config: Config, manager: AccountManager): express.A
   // Routes — OpenAI compatible
   app.post(
     "/v1/chat/completions",
-    routeByModel(claudeProvider.handleChatCompletions(), codexProvider.handleChatCompletions())
+    routeByModel(
+      claudeProvider.handleChatCompletions(),
+      codexProvider.handleChatCompletions(),
+      "POST /v1/chat/completions"
+    )
   );
   app.post(
     "/v1/responses",
-    routeByModel(claudeProvider.handleResponses(), codexProvider.handleResponses())
+    routeByModel(
+      claudeProvider.handleResponses(),
+      codexProvider.handleResponses(),
+      "POST /v1/responses"
+    )
   );
 
   // Routes — Claude native passthrough
-  app.post("/v1/messages/count_tokens", claudeProvider.handleCountTokens());
-  app.post("/v1/messages", claudeProvider.handleMessages());
+  app.post(
+    "/v1/messages/count_tokens",
+    wrapTrackedHandler(
+      usageTracker,
+      { endpoint: "POST /v1/messages/count_tokens", provider: "claude" },
+      claudeProvider.handleCountTokens()
+    )
+  );
+  app.post(
+    "/v1/messages",
+    wrapTrackedHandler(
+      usageTracker,
+      { endpoint: "POST /v1/messages", provider: "claude" },
+      claudeProvider.handleMessages()
+    )
+  );
 
   app.get("/v1/models", (_req, res) => {
     const models = [...claudeProvider.listModels(), ...codexProvider.listModels()];
@@ -188,6 +234,15 @@ export function createServer(config: Config, manager: AccountManager): express.A
       codex: codexStatus,
       generated_at: new Date().toISOString(),
     });
+  });
+
+  app.get("/admin/usage", (_req, res) => {
+    res.json(usageTracker.snapshot());
+  });
+
+  app.get("/admin/usage/recent", (req, res) => {
+    const limit = Number(req.query.limit);
+    res.json(usageTracker.recent(Number.isFinite(limit) ? limit : undefined));
   });
 
   return app;

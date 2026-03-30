@@ -23,6 +23,7 @@ It is still intentionally not a multi-account pool or a large routing platform. 
 - **Claude Code friendly** — works with both `Authorization: Bearer` and `x-api-key`
 - **Streaming, tools, images, and reasoning** — covers the main Claude usage patterns without a large framework
 - **Provider-aware status** — Claude account health plus Codex auth status in `/admin/accounts`
+- **Lightweight usage monitoring** — in-memory request stats via `/admin/usage` and `/admin/usage/recent`
 - **Basic safety defaults** — timing-safe API key validation, per-IP rate limiting, localhost-only browser CORS
 
 ## Requirements
@@ -225,6 +226,8 @@ Codex models are configured explicitly in `config.yaml` under `codex.models`. On
 | `POST /v1/messages/count_tokens` | Claude token counting, Claude-only |
 | `GET /v1/models` | List available models |
 | `GET /admin/accounts` | Claude + Codex provider status (API key required) |
+| `GET /admin/usage` | In-memory request aggregates by provider, endpoint, and model |
+| `GET /admin/usage/recent` | Recent request summaries, newest first |
 | `GET /health` | Health check |
 
 ## Docker
@@ -283,6 +286,22 @@ Use `/admin/accounts` with your configured API key to inspect the current accoun
 curl http://127.0.0.1:8317/admin/accounts \
   -H "Authorization: Bearer <your-api-key>"
 ```
+
+Use `/admin/usage` to inspect current in-memory request counters:
+
+```bash
+curl http://127.0.0.1:8317/admin/usage \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+Use `/admin/usage/recent` to inspect recent request summaries:
+
+```bash
+curl "http://127.0.0.1:8317/admin/usage/recent?limit=20" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+These usage statistics are memory-only in the current version. They reset when the process restarts.
 
 The response includes legacy Claude account snapshots plus separate `claude` and `codex` provider sections so you can see provider availability independently.
 
