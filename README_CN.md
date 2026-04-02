@@ -25,6 +25,7 @@ Claude + Codex Proxy API
 - 支持 Claude 原生 `POST /v1/messages` 和 `POST /v1/messages/count_tokens`
 - 提供 `GET /admin/accounts` 查看 provider 状态
 - 提供 `GET /admin/usage` 和 `GET /admin/usage/recent` 查看内存中的请求统计
+- 提供 `GET /monitor` 作为浏览器监控页入口
 
 路由规则很简单：
 
@@ -82,8 +83,6 @@ codex:
   auth-file: "~/.codex/auth.json"
   models:
     - "gpt-5.4"
-    - "o3"
-    - "codex-mini-latest"
 
 debug: "off"
 ```
@@ -208,6 +207,7 @@ Codex 模型只来自 `codex.models`。
 | `GET /admin/accounts` | 查看 provider 可用性和登录提示 |
 | `GET /admin/usage` | 查看聚合使用统计 |
 | `GET /admin/usage/recent` | 查看最近请求摘要 |
+| `GET /monitor` | 浏览器监控页入口 |
 | `GET /health` | 健康检查 |
 
 `/v1` 和 `/admin` 都需要 API key。
@@ -226,6 +226,14 @@ Codex 模型只来自 `codex.models`。
 `/admin/usage/recent` 返回最近请求摘要，最新的在前面。
 
 这些统计只存在内存里，重启后会清空。
+
+如果你想在浏览器里看，直接打开：
+
+```text
+http://127.0.0.1:8317/monitor
+```
+
+`/monitor` 本身只是一个 HTML 壳页，不会在服务端直接嵌入实时统计。页面加载后会让你输入 API key，再由浏览器同源请求现有的 `/admin/accounts`、`/admin/usage`、`/admin/usage/recent`。
 
 ## 调试
 

@@ -118,7 +118,7 @@ async function requestJson(options: {
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
-}): Promise<{ status: number; body: any; rawBody: string }> {
+}): Promise<{ status: number; body: any; rawBody: string; headers: http.IncomingHttpHeaders }> {
   const address = serverAddress(options.server);
   const payload = options.body ? JSON.stringify(options.body) : undefined;
 
@@ -153,6 +153,7 @@ async function requestJson(options: {
             status: res.statusCode || 0,
             body,
             rawBody: data,
+            headers: res.headers,
           });
         });
       }
@@ -173,6 +174,37 @@ function withMockedFetch(
     global.fetch = originalFetch;
   };
 }
+
+test("browser monitor page is directly openable and does not embed API keys", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-monitor-page-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-monitor-page-home-"));
+  writeCodexAuth(authDir);
+
+  const config = makeConfig(authDir);
+  const manager = makeManager(authDir, [makeToken()]);
+  const server = await withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const pageResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/monitor",
+  });
+
+  assert.equal(pageResp.status, 200);
+  assert.match(String(pageResp.headers["content-type"] || ""), /text\/html/i);
+  assert.match(pageResp.rawBody, /ccpa Monitor/i);
+  assert.match(pageResp.rawBody, /\/admin\/accounts/);
+  assert.match(pageResp.rawBody, /\/admin\/usage/);
+  assert.match(pageResp.rawBody, /\/admin\/usage\/recent/);
+  assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
+  assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
+});
 
 test("admin usage endpoints expose provider, endpoint, and model aggregates", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-"));

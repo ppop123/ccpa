@@ -25,6 +25,7 @@ The repository is called `ccpa`. Some runtime logs and config paths still use th
 - supports Claude native `POST /v1/messages` and `POST /v1/messages/count_tokens`
 - provides admin status at `GET /admin/accounts`
 - provides in-memory usage stats at `GET /admin/usage` and `GET /admin/usage/recent`
+- provides a browser dashboard shell at `GET /monitor`
 
 Routing is simple:
 
@@ -82,8 +83,6 @@ codex:
   auth-file: "~/.codex/auth.json"
   models:
     - "gpt-5.4"
-    - "o3"
-    - "codex-mini-latest"
 
 debug: "off"
 ```
@@ -208,6 +207,7 @@ Important runtime rules:
 | `GET /admin/accounts` | Provider availability and login hints |
 | `GET /admin/usage` | Aggregate usage counters |
 | `GET /admin/usage/recent` | Recent request summaries |
+| `GET /monitor` | Browser dashboard shell for the admin endpoints |
 | `GET /health` | Health check |
 
 Both `/v1` and `/admin` require your API key.
@@ -226,6 +226,14 @@ Both `/v1` and `/admin` require your API key.
 `/admin/usage/recent` gives the newest request summaries first.
 
 These stats are memory-only and reset on restart.
+
+If you want to inspect them in a browser, open:
+
+```text
+http://127.0.0.1:8317/monitor
+```
+
+The `/monitor` page itself does not embed live data server-side. It asks for an API key in the browser, then calls the existing `/admin/accounts`, `/admin/usage`, and `/admin/usage/recent` endpoints over same-origin requests.
 
 ## Debugging
 

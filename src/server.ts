@@ -3,6 +3,7 @@ import express from "express";
 import { Config, isDebugLevel } from "./config";
 import { AccountManager } from "./accounts/manager";
 import { extractApiKey } from "./api-key";
+import { renderMonitorPage } from "./monitoring/dashboard-page";
 import { resolveUsageProvider, wrapTrackedHandler } from "./monitoring/http-usage";
 import { UsageTracker } from "./monitoring/usage";
 import { ClaudeProvider } from "./providers/claude";
@@ -222,6 +223,10 @@ export function createServer(config: Config, manager: AccountManager): express.A
   // Health check (no account count to avoid info leak)
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get("/monitor", (_req, res) => {
+    res.type("html").send(renderMonitorPage());
   });
 
   app.get("/admin/accounts", (_req, res) => {
