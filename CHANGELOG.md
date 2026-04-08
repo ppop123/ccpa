@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.1 - 2026-04-09
+
+This release tightens runtime observability and fixes recent Codex compatibility regressions.
+
+### Added
+
+- Browser monitor now breaks traffic down by request source in addition to provider, endpoint, and model
+- Recent request records now include source, client IP, and user-agent metadata
+- Cooldown handling is shared across Claude endpoints with explicit status mapping for server and network cooldowns
+
+### Fixed
+
+- Codex non-stream responses now preserve assistant output when upstream `response.completed` events carry an empty `output` array
+- Monitor status codes now distinguish upstream rate limits from local server and network cooldowns instead of collapsing them into `429`
+- Admin usage tests now cover source tracking and the updated Codex SSE shape
+
 ## 1.1.0 - 2026-03-30
 
 This release turns the original single-provider proxy into a practical local dual-provider service for Claude and Codex.
