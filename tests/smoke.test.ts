@@ -38,7 +38,7 @@ function makeConfig(authDir: string): Config {
     codex: {
       enabled: true,
       "auth-file": path.join(authDir, "codex-auth.json"),
-      models: ["gpt-5.4", "o3", "codex-mini-latest"],
+      models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2"],
     },
   };
 }
@@ -479,6 +479,67 @@ test("returns rate limited when the configured account is cooled down", async (t
   assert.equal(resp.body.error.message, "Rate limited on the configured account");
 });
 
+test("returns network cooldown as 502 instead of 429", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const manager = makeManager(authDir, [makeToken()]);
+  manager.recordFailure("test@example.com", "network", "forced for smoke test");
+  const restoreFetch = withMockedFetch(async () => {
+    throw new Error("Upstream should not be called while the configured account is cooled down");
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4",
+      messages: [{ role: "user", content: "hello" }],
+    },
+  });
+
+  assert.equal(resp.status, 502);
+  assert.equal(resp.body.error.message, "Configured account is cooling down after an upstream network error");
+});
+
+test("returns server cooldown as 503 on responses endpoint", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const manager = makeManager(authDir, [makeToken()]);
+  manager.recordFailure("test@example.com", "server", "forced for smoke test");
+  const restoreFetch = withMockedFetch(async () => {
+    throw new Error("Upstream should not be called while the configured account is cooled down");
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/responses",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4",
+      input: [{ role: "user", content: "hello" }],
+      stream: false,
+    },
+  });
+
+  assert.equal(resp.status, 503);
+  assert.equal(resp.body.error.message, "Configured account is cooling down after an upstream server error");
+});
+
 test("missing Codex auth only breaks Codex models and still allows Claude models", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-home-"));
@@ -604,14 +665,14 @@ test("Codex models not listed in config are rejected", async (t) => {
     path: "/v1/responses",
     headers: { Authorization: "Bearer test-key" },
     body: {
-      model: "o3",
+      model: "gpt-5.4-mini",
       input: [{ role: "user", content: "not configured" }],
       stream: false,
     },
   });
 
   assert.equal(resp.status, 400);
-  assert.equal(resp.body.error.message, "Unsupported model: o3");
+  assert.equal(resp.body.error.message, "Unsupported model: gpt-5.4-mini");
 });
 
 test("rejects loading multiple accounts in single-account mode", (t) => {

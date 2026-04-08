@@ -83,6 +83,8 @@ codex:
   auth-file: "~/.codex/auth.json"
   models:
     - "gpt-5.4"
+    - "gpt-5.4-mini"
+    - "gpt-5.2"
 
 debug: "off"
 ```

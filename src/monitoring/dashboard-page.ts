@@ -447,10 +447,12 @@ export function renderMonitorPage(): string {
           <div class="panel-header">
             <div>
               <span class="panel-kicker">Breakdown</span>
-              <h2>Providers & Endpoints</h2>
+              <h2>Providers, Sources & Endpoints</h2>
             </div>
           </div>
           <div id="providers-table"></div>
+          <div style="height:16px;"></div>
+          <div id="sources-table"></div>
           <div style="height:16px;"></div>
           <div id="endpoints-table"></div>
         </article>
@@ -645,6 +647,11 @@ export function renderMonitorPage(): string {
           );
         }
 
+        function summarizeUserAgent(value) {
+          if (!value) return "No user-agent";
+          return value.length > 72 ? value.slice(0, 69) + "..." : value;
+        }
+
         function renderRecentTable(items) {
           if (!items.length) {
             return '<div class="empty">No recent traffic yet.</div>';
@@ -652,12 +659,21 @@ export function renderMonitorPage(): string {
 
           return (
             "<table>" +
-              "<thead><tr><th>When</th><th>Provider</th><th>Endpoint</th><th>Model</th><th>Status</th><th>Latency</th><th>Tokens</th></tr></thead>" +
+              "<thead><tr><th>When</th><th>Source</th><th>Provider</th><th>Endpoint</th><th>Model</th><th>Status</th><th>Latency</th><th>Tokens</th></tr></thead>" +
               "<tbody>" +
                 items.map(function (item) {
+                  var source = item.source || "direct";
+                  var clientIp = item.clientIp || "unknown";
+                  var userAgent = item.userAgent || null;
                   return (
                     "<tr>" +
                       "<td>" + escapeHtml(formatDate(item.timestamp)) + "</td>" +
+                      "<td>" +
+                        "<div><code>" + escapeHtml(source) + "</code></div>" +
+                        '<div class="muted tiny" title="' + escapeHtml(userAgent || "No user-agent") + '">' +
+                          escapeHtml(clientIp) + " | " + escapeHtml(summarizeUserAgent(userAgent)) +
+                        "</div>" +
+                      "</td>" +
                       "<td><code>" + escapeHtml(item.provider || "unknown") + "</code></td>" +
                       "<td><code>" + escapeHtml(item.endpoint || "-") + "</code></td>" +
                       "<td><code>" + escapeHtml(item.model || "-") + "</code></td>" +
@@ -705,6 +721,8 @@ export function renderMonitorPage(): string {
 
           document.getElementById("providers-table").innerHTML =
             renderCounterTable("By Provider", sortCounterEntries(usage.providers));
+          document.getElementById("sources-table").innerHTML =
+            renderCounterTable("By Source", sortCounterEntries(usage.sources));
           document.getElementById("endpoints-table").innerHTML =
             renderCounterTable("By Endpoint", sortCounterEntries(usage.endpoints));
           document.getElementById("models-table").innerHTML =

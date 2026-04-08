@@ -4,6 +4,7 @@ import { Config, isDebugLevel } from "../config";
 import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI, callClaudeCountTokens } from "./claude-api";
+import { getCooldownHttpError } from "./cooldown";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -39,7 +40,8 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
         if (!account) {
           const availability = manager.getAvailability();
           if (availability.state === "cooldown") {
-            res.status(429).json({ error: { type: "api_error", message: "Rate limited on the configured account" } });
+            const cooldownError = getCooldownHttpError(availability);
+            res.status(cooldownError.status).json({ error: { type: "api_error", message: cooldownError.message } });
           } else {
             res.status(503).json({ error: { type: "api_error", message: "No available account" } });
           }
@@ -152,7 +154,8 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
         if (!account) {
           const availability = manager.getAvailability();
           if (availability.state === "cooldown") {
-            res.status(429).json({ error: { type: "api_error", message: "Rate limited on the configured account" } });
+            const cooldownError = getCooldownHttpError(availability);
+            res.status(cooldownError.status).json({ error: { type: "api_error", message: cooldownError.message } });
           } else {
             res.status(503).json({ error: { type: "api_error", message: "No available account" } });
           }

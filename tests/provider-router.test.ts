@@ -11,12 +11,12 @@ test("gpt-5.4 routes to codex", () => {
   assert.equal(resolveProviderFromModel("gpt-5.4"), "codex");
 });
 
-test("codex-mini-latest routes to codex", () => {
-  assert.equal(resolveProviderFromModel("codex-mini-latest"), "codex");
+test("gpt-5.4-mini routes to codex", () => {
+  assert.equal(resolveProviderFromModel("gpt-5.4-mini"), "codex");
 });
 
-test("o3 routes to codex", () => {
-  assert.equal(resolveProviderFromModel("o3"), "codex");
+test("gpt-5.2 routes to codex", () => {
+  assert.equal(resolveProviderFromModel("gpt-5.2"), "codex");
 });
 
 test("o4-mini routes to codex", () => {

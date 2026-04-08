@@ -261,13 +261,18 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  const headers = { Authorization: "Bearer test-key" };
+  const baseHeaders = { Authorization: "Bearer test-key" };
 
   const claudeResp = await requestJson({
     server,
     method: "POST",
     path: "/v1/chat/completions",
-    headers,
+    headers: {
+      ...baseHeaders,
+      "User-Agent": "OpenClaw/2026.4.2",
+      "X-OpenClaw-Agent": "diting",
+      "X-Forwarded-For": "10.0.0.8",
+    },
     body: {
       model: "claude-sonnet-4-6",
       messages: [{ role: "user", content: "hi claude" }],
@@ -281,7 +286,10 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     server,
     method: "POST",
     path: "/v1/responses",
-    headers,
+    headers: {
+      ...baseHeaders,
+      "User-Agent": "curl/8.7.1",
+    },
     body: {
       model: "gpt-5.4",
       input: [{ role: "user", content: "hi codex" }],
@@ -295,7 +303,7 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     server,
     method: "GET",
     path: "/admin/usage",
-    headers,
+    headers: baseHeaders,
   });
 
   assert.equal(usageResp.status, 200);
@@ -304,6 +312,8 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
   assert.equal(usageResp.body.providers.codex.totalRequests, 1);
   assert.equal(usageResp.body.models["claude-sonnet-4-6"].totalRequests, 1);
   assert.equal(usageResp.body.models["gpt-5.4"].totalRequests, 1);
+  assert.equal(usageResp.body.sources["openclaw:diting"].totalRequests, 1);
+  assert.equal(usageResp.body.sources.curl.totalRequests, 1);
   assert.equal(usageResp.body.endpoints["POST /v1/chat/completions"].totalRequests, 1);
   assert.equal(usageResp.body.endpoints["POST /v1/responses"].totalRequests, 1);
 
@@ -311,7 +321,7 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     server,
     method: "GET",
     path: "/admin/usage/recent",
-    headers,
+    headers: baseHeaders,
   });
 
   assert.equal(recentResp.status, 200);
@@ -319,7 +329,13 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
   assert.equal(recentResp.body.items[0].endpoint, "POST /v1/responses");
   assert.equal(recentResp.body.items[0].provider, "codex");
   assert.equal(recentResp.body.items[0].model, "gpt-5.4");
+  assert.equal(recentResp.body.items[0].source, "curl");
+  assert.equal(recentResp.body.items[0].clientIp, "127.0.0.1");
+  assert.equal(recentResp.body.items[0].userAgent, "curl/8.7.1");
   assert.equal(recentResp.body.items[1].provider, "claude");
+  assert.equal(recentResp.body.items[1].source, "openclaw:diting");
+  assert.equal(recentResp.body.items[1].clientIp, "10.0.0.8");
+  assert.equal(recentResp.body.items[1].userAgent, "OpenClaw/2026.4.2");
 });
 
 test("admin usage tracks failed requests and recent limit", async (t) => {
@@ -411,4 +427,7 @@ test("admin usage tracks failed requests and recent limit", async (t) => {
   assert.equal(recentResp.body.items[0].success, true);
   assert.equal(recentResp.body.items[0].statusCode, 200);
   assert.equal(typeof recentResp.body.items[0].latencyMs, "number");
+  assert.equal(recentResp.body.items[0].source, "local");
+  assert.equal(recentResp.body.items[0].clientIp, "127.0.0.1");
+  assert.equal(recentResp.body.items[0].userAgent, null);
 });

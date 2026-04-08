@@ -35,7 +35,7 @@ function makeConfig(authDir: string, codexAuthFile: string): Config {
     codex: {
       enabled: true,
       "auth-file": codexAuthFile,
-      models: ["gpt-5.4", "codex-mini-latest"],
+      models: ["gpt-5.4", "gpt-5.4-mini"],
     },
     debug: "off",
   };
@@ -155,7 +155,7 @@ test("CodexProvider lists configured models", () => {
 
   assert.deepEqual(
     provider.listModels().map((model) => model.id),
-    ["gpt-5.4", "codex-mini-latest"]
+    ["gpt-5.4", "gpt-5.4-mini"]
   );
 });
 
@@ -210,7 +210,7 @@ test("CodexProvider supports only configured models when enabled", () => {
   const provider = new CodexProvider(config);
 
   assert.equal(provider.supportsModel("gpt-5.4"), true);
-  assert.equal(provider.supportsModel("o3"), false);
+  assert.equal(provider.supportsModel("gpt-5.2"), false);
 });
 
 test("CodexProvider rejects all models when disabled", () => {

@@ -11,6 +11,97 @@ type UsageDetails = {
 
 type ProviderResolver = (req: express.Request) => UsageProvider;
 
+function getClientIp(req: express.Request): string {
+  const forwardedFor = req.get("x-forwarded-for");
+  if (forwardedFor) {
+    const first = forwardedFor
+      .split(",")
+      .map((part) => part.trim())
+      .find(Boolean);
+    if (first) {
+      return first;
+    }
+  }
+
+  const candidate = req.ip || req.socket.remoteAddress || req.connection.remoteAddress;
+  if (!candidate) {
+    return "unknown";
+  }
+
+  return candidate.startsWith("::ffff:") ? candidate.slice(7) : candidate;
+}
+
+function getUserAgent(req: express.Request): string | null {
+  const value = req.get("user-agent");
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function firstHeaderValue(req: express.Request, names: string[]): string | null {
+  for (const name of names) {
+    const value = req.get(name);
+    if (value) {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+function classifySource(req: express.Request, clientIp: string, userAgent: string | null): string {
+  const explicitSource = firstHeaderValue(req, ["x-request-source", "x-ccpa-source"]);
+  if (explicitSource) {
+    return explicitSource;
+  }
+
+  const openclawAgent = firstHeaderValue(req, ["x-openclaw-agent"]);
+  if (openclawAgent) {
+    return `openclaw:${openclawAgent}`;
+  }
+
+  const openclawSession = firstHeaderValue(req, ["x-openclaw-session"]);
+  if (openclawSession) {
+    return `openclaw-session:${openclawSession}`;
+  }
+
+  const openclawRun = firstHeaderValue(req, ["x-openclaw-run-id"]);
+  if (openclawRun) {
+    return `openclaw-run:${openclawRun}`;
+  }
+
+  const loweredAgent = (userAgent || "").toLowerCase();
+  if (loweredAgent.includes("openclaw")) {
+    return "openclaw";
+  }
+  if (loweredAgent.includes("clade")) {
+    return "clade";
+  }
+  if (loweredAgent.includes("claude-cli")) {
+    return "claude-cli";
+  }
+  if (loweredAgent.includes("curl/")) {
+    return "curl";
+  }
+  if (loweredAgent.includes("openai/")) {
+    return "openai-sdk";
+  }
+  if (loweredAgent.includes("python")) {
+    return "python-client";
+  }
+  if (loweredAgent.includes("node")) {
+    return "node-client";
+  }
+  if (clientIp === "127.0.0.1" || clientIp === "::1") {
+    return "local";
+  }
+  return "direct";
+}
+
 function parseJsonUsage(body: any): UsageDetails {
   const promptTokens = body?.usage?.prompt_tokens;
   const completionTokens = body?.usage?.completion_tokens;
@@ -166,6 +257,9 @@ export function wrapTrackedHandler(
     const startedAt = Date.now();
     const provider =
       typeof options.provider === "function" ? options.provider(req) : options.provider;
+    const clientIp = getClientIp(req);
+    const userAgent = getUserAgent(req);
+    const source = classifySource(req, clientIp, userAgent);
     let details: UsageDetails = {
       model: typeof req.body?.model === "string" ? req.body.model : null,
       inputTokens: 0,
@@ -196,6 +290,9 @@ export function wrapTrackedHandler(
     res.once("finish", () => {
       tracker.record({
         provider,
+        source,
+        clientIp,
+        userAgent,
         endpoint: options.endpoint,
         model: details.model,
         statusCode: res.statusCode,

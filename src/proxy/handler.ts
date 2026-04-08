@@ -5,6 +5,7 @@ import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { openaiToClaude, claudeToOpenai, resolveModel } from "./translator";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
+import { getCooldownHttpError } from "./cooldown";
 import { handleStreamingResponse } from "./streaming";
 
 const MAX_RETRIES = 3;
@@ -43,9 +44,10 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
         if (!account) {
           const availability = manager.getAvailability();
           if (availability.state === "cooldown") {
-            res.status(429).json({
+            const cooldownError = getCooldownHttpError(availability);
+            res.status(cooldownError.status).json({
               error: {
-                message: "Rate limited on the configured account",
+                message: cooldownError.message,
                 type: "upstream_error",
               },
             });

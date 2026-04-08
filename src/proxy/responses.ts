@@ -5,6 +5,7 @@ import { Config, isDebugLevel } from "../config";
 import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
+import { getCooldownHttpError } from "./cooldown";
 import { resolveModel } from "./translator";
 
 const MAX_RETRIES = 3;
@@ -462,7 +463,8 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
         if (!account) {
           const availability = manager.getAvailability();
           if (availability.state === "cooldown") {
-            res.status(429).json({ error: { message: "Rate limited on the configured account" } });
+            const cooldownError = getCooldownHttpError(availability);
+            res.status(cooldownError.status).json({ error: { message: cooldownError.message } });
           } else {
             res.status(503).json({ error: { message: "No available account" } });
           }

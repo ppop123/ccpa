@@ -31,3 +31,18 @@ test("collectCodexResponseFromSse parses SSE even when content-type is omitted",
   assert.equal(response.output[0].content[0].text, "ok");
   assert.equal(response.usage.total_tokens, 2);
 });
+
+test("collectCodexResponseFromSse preserves output items when completed event carries an empty output array", async () => {
+  const response = await collectCodexResponseFromSse(makeResponse([
+    "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_live\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"gpt-5.4\",\"output\":[]}}\n\n",
+    "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_live\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0}\n\n",
+    "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n",
+    "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_live\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\",\"annotations\":[]}],\"role\":\"assistant\"},\"output_index\":0}\n\n",
+    "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_live\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"gpt-5.4\",\"output\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n",
+  ]));
+
+  assert.equal(response.id, "resp_live");
+  assert.equal(response.output.length, 1);
+  assert.equal(response.output[0].content[0].text, "ok");
+  assert.equal(response.usage.total_tokens, 15);
+});

@@ -6,6 +6,9 @@ export interface UsageRecord {
   id: number;
   timestamp: string;
   provider: UsageProvider;
+  source: string;
+  clientIp: string;
+  userAgent: string | null;
   endpoint: string;
   model: string | null;
   statusCode: number;
@@ -30,6 +33,7 @@ export interface UsageCounter {
 export interface UsageSnapshot {
   totals: UsageCounter;
   providers: Record<string, UsageCounter>;
+  sources: Record<string, UsageCounter>;
   endpoints: Record<string, UsageCounter>;
   models: Record<string, UsageCounter>;
   requestsByDay: Record<string, number>;
@@ -68,6 +72,7 @@ function updateCounter(counter: UsageCounter, record: UsageRecord): void {
 export class UsageTracker {
   private readonly totals = createCounter();
   private readonly providers = new Map<string, UsageCounter>();
+  private readonly sources = new Map<string, UsageCounter>();
   private readonly endpoints = new Map<string, UsageCounter>();
   private readonly models = new Map<string, UsageCounter>();
   private readonly requestsByDay = new Map<string, number>();
@@ -87,6 +92,7 @@ export class UsageTracker {
 
     updateCounter(this.totals, fullRecord);
     updateCounter(this.getOrCreate(this.providers, fullRecord.provider), fullRecord);
+    updateCounter(this.getOrCreate(this.sources, fullRecord.source), fullRecord);
     updateCounter(this.getOrCreate(this.endpoints, fullRecord.endpoint), fullRecord);
 
     if (fullRecord.model) {
@@ -110,6 +116,7 @@ export class UsageTracker {
     return {
       totals: { ...this.totals },
       providers: this.toObject(this.providers),
+      sources: this.toObject(this.sources),
       endpoints: this.toObject(this.endpoints),
       models: this.toObject(this.models),
       requestsByDay: Object.fromEntries(this.requestsByDay),
