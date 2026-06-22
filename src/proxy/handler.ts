@@ -4,6 +4,7 @@ import { Config, isDebugLevel } from "../config";
 import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
+import { redactForLog } from "../logging/redact";
 import { openaiToClaude, claudeToOpenai, resolveModel } from "./translator";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
@@ -1513,7 +1514,7 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
             accountEmail: account.email,
           });
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Attempt ${attempt + 1} network failure: ${err.message}`);
+            console.error(redactForLog(`Attempt ${attempt + 1} network failure: ${err.message}`));
           }
           if (attempt < MAX_RETRIES - 1) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
@@ -1552,7 +1553,7 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
         try {
           const errText = await upstreamResp.text();
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Attempt ${attempt + 1} failed (${lastStatus}): ${errText}`);
+            console.error(redactForLog(`Attempt ${attempt + 1} failed (${lastStatus}): ${errText}`));
           }
         } catch { /* ignore */ }
 
@@ -1607,7 +1608,7 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
       }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
-      console.error("Handler error:", err.message);
+      console.error("Handler error:", redactForLog(err.message));
       setFailureContext(res, {
         stage: "internal",
         kind: "internal_error",

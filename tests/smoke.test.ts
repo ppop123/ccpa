@@ -438,6 +438,56 @@ test("unauthenticated /v1 requests do not consume local rate limit quota", async
   assert.equal(valid.status, 200);
 });
 
+test("debug upstream error logging redacts sensitive upstream bodies", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-debug-redact-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-debug-redact-home-"));
+  const config = { ...makeConfig(authDir), debug: "errors" as const };
+  const manager = makeManager(authDir, [makeToken({ email: "private.user@example.com" })]);
+  const originalError = console.error;
+  const logs: string[] = [];
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+
+  const restoreFetch = withMockedFetch(async (input) => {
+    const url = String(input);
+    if (url === "https://api.anthropic.com/v1/messages?beta=true") {
+      return new Response(
+        '{"error":{"message":"private.user@example.com sk-secret1234567890 upstream failed"}}',
+        { status: 403 }
+      );
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const server = await withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    console.error = originalError;
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-opus-4-8",
+      messages: [{ role: "user", content: "trigger upstream error" }],
+    },
+  });
+
+  assert.equal(resp.status, 403);
+  const output = logs.join("\n");
+  assert.doesNotMatch(output, /private\.user@example\.com/);
+  assert.doesNotMatch(output, /sk-secret1234567890/);
+  assert.match(output, /\[email:redacted\]/);
+  assert.match(output, /\[api-key:redacted\]/);
+});
+
 test("JSON parse and body limit errors return OpenAI-style JSON", async (t) => {
   const parseAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-parse-"));
   const limitAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-limit-"));

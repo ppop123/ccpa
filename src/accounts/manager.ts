@@ -269,12 +269,12 @@ export class AccountManager {
 
   startAutoRefresh(): void {
     const timer = setInterval(
-      () => this.refreshAll().catch((err) => console.error("Refresh cycle failed:", err.message)),
+      () => this.refreshAll().catch((err) => console.error("Refresh cycle failed:", redactForLog(err.message))),
       REFRESH_CHECK_INTERVAL_MS
     );
     timer.unref();
     this.refreshTimer = timer;
-    this.refreshAll().catch((err) => console.error("Initial refresh failed:", err.message));
+    this.refreshAll().catch((err) => console.error("Initial refresh failed:", redactForLog(err.message)));
   }
 
   stopAutoRefresh(): void {
@@ -434,7 +434,7 @@ export class AccountManager {
       fs.mkdirSync(this.authDir, { recursive: true, mode: 0o700 });
       fs.writeFileSync(this.stateFilePath, JSON.stringify(stateFile, null, 2), { mode: 0o600 });
     } catch (err: any) {
-      console.error(`Failed to persist account state ${this.stateFilePath}: ${err.message}`);
+      console.error(redactForLog(`Failed to persist account state ${this.stateFilePath}: ${err.message}`));
     }
   }
 

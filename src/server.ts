@@ -12,6 +12,7 @@ import { ClaudeProvider } from "./providers/claude";
 import { CodexProvider } from "./providers/codex";
 import { resolveProviderFromModel } from "./providers/router";
 import { authenticationError, invalidRequest, rateLimitError } from "./errors/openai";
+import { redactForLog } from "./logging/redact";
 
 // Timing-safe API key comparison
 function safeCompare(a: string, b: string): boolean {
@@ -294,10 +295,10 @@ export function createServer(config: Config, manager: AccountManager): express.A
   if (isDebugLevel(config.debug, "verbose")) {
     app.use((req, res, next) => {
       const startedAt = Date.now();
-      console.error(`[debug] ${req.method} ${req.originalUrl} started`);
+      console.error(redactForLog(`[debug] ${req.method} ${req.originalUrl} started`));
       res.on("finish", () => {
         console.error(
-          `[debug] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${Date.now() - startedAt}ms`
+          redactForLog(`[debug] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${Date.now() - startedAt}ms`)
         );
       });
       next();

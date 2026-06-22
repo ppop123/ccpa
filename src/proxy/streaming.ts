@@ -1,5 +1,6 @@
 import { Response as ExpressResponse } from "express";
 import { setFailureContext } from "../monitoring/http-usage";
+import { redactForLog } from "../logging/redact";
 import { claudeStreamEventToOpenai, createStreamState } from "./translator";
 
 export interface StreamResult {
@@ -73,7 +74,7 @@ export async function handleStreamingResponse(
       }
     }
   } catch (err) {
-    if (!clientDisconnected) console.error("Stream error:", err);
+    if (!clientDisconnected) console.error("Stream error:", redactForLog(err));
   } finally {
     if (!clientDisconnected) {
       if (!completed) {

@@ -4,6 +4,7 @@ import { Config, isDebugLevel } from "../config";
 import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
+import { redactForLog } from "../logging/redact";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI, callClaudeCountTokens } from "./claude-api";
 import { readClaudeJsonResponse } from "./upstream-json";
@@ -555,7 +556,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
             accountEmail: account.email,
           });
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Messages attempt ${attempt + 1} network failure: ${err.message}`);
+            console.error(redactForLog(`Messages attempt ${attempt + 1} network failure: ${err.message}`));
           }
           if (attempt < MAX_RETRIES - 1) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
@@ -611,7 +612,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
                 manager.recordSuccess(account.email);
               }
             } catch (err) {
-              if (!clientDisconnected) console.error("Stream pipe error:", err);
+              if (!clientDisconnected) console.error("Stream pipe error:", redactForLog(err));
             } finally {
               if (!clientDisconnected) {
                 if (!completionState.completed) {
@@ -641,7 +642,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
         try {
           const errText = await upstreamResp.text();
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Messages attempt ${attempt + 1} failed (${lastStatus}): ${errText}`);
+            console.error(redactForLog(`Messages attempt ${attempt + 1} failed (${lastStatus}): ${errText}`));
           }
         } catch { /* ignore */ }
 
@@ -690,7 +691,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
       }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
-      console.error("Messages handler error:", err.message);
+      console.error("Messages handler error:", redactForLog(err.message));
       setFailureContext(res, {
         stage: "internal",
         kind: "internal_error",
@@ -756,7 +757,7 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
             accountEmail: account.email,
           });
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Count tokens attempt ${attempt + 1} network failure: ${err.message}`);
+            console.error(redactForLog(`Count tokens attempt ${attempt + 1} network failure: ${err.message}`));
           }
           if (attempt < MAX_RETRIES - 1) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
@@ -822,7 +823,7 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
       }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
-      console.error("Count tokens error:", err.message);
+      console.error("Count tokens error:", redactForLog(err.message));
       setFailureContext(res, {
         stage: "internal",
         kind: "internal_error",

@@ -5,6 +5,7 @@ import { Config, isDebugLevel } from "../config";
 import { AccountFailureKind, AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
+import { redactForLog } from "../logging/redact";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
 import { resolveModel } from "./translator";
@@ -2049,7 +2050,7 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
             accountEmail: account.email,
           });
           if (isDebugLevel(config.debug, "errors")) {
-            console.error(`Responses attempt ${attempt + 1} network failure: ${err.message}`);
+            console.error(redactForLog(`Responses attempt ${attempt + 1} network failure: ${err.message}`));
           }
           if (attempt < MAX_RETRIES - 1) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
@@ -2108,7 +2109,7 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
                 }
               }
             } catch (err) {
-              if (!clientDisconnected) console.error("Responses stream error:", err);
+              if (!clientDisconnected) console.error("Responses stream error:", redactForLog(err));
             } finally {
               if (!clientDisconnected) {
                 if (completed) {
@@ -2138,7 +2139,7 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
         lastStatus = upstreamResp.status;
         if (isDebugLevel(config.debug, "errors")) {
           const errText = await upstreamResp.text().catch(() => "");
-          console.error(`Responses attempt ${attempt + 1} failed (${lastStatus}): ${errText}`);
+          console.error(redactForLog(`Responses attempt ${attempt + 1} failed (${lastStatus}): ${errText}`));
         }
 
         if (lastStatus === 401) {
@@ -2186,7 +2187,7 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
       }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
-      console.error("Responses handler error:", err.message);
+      console.error("Responses handler error:", redactForLog(err.message));
       setFailureContext(res, {
         stage: "internal",
         kind: "internal_error",
