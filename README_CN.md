@@ -354,6 +354,11 @@ API key；如果服务监听所有网卡但本地 rate limit 关闭，只给 war
 npm run release:verify -- --require-provider-status ok
 ```
 
+设置 `--require-external-healthcheck-dir` 时，rollout preflight 也会把外部
+healthcheck wrapper 的日志维护导出当成严格契约：wrapper 必须启用
+`CCPA_HEALTHCHECK_MAINTAIN_LOGS`，并设置 `CCPA_LOG_PATHS` 覆盖 `/tmp/ccpa.*`
+以及 `$HOME/ccpa/logs/launchd.{stdout,stderr}.log`。
+
 如果你明确想花上游额度做真实端到端矩阵，先看 `release:verify` 也会使用的 dry-run 计划：
 
 ```bash
@@ -376,6 +381,11 @@ npm run healthcheck -- --no-restart
 ```
 
 它复用同一条低成本 canary，并默认继续跑 no-upstream contract gate；从配置或环境读取 API key，不会调用真实模型生成接口。作为守护脚本使用时保持 restart 开启，或显式设置 `CCPA_HEALTHCHECK_RESTART=true`；手动排障时用 `--no-restart`。只有在排障时想保留浅层健康检查，才设置 `CCPA_HEALTHCHECK_RUN_CONTRACT=false`。如果希望 healthcheck 在 canary 前顺手维护日志，设置 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true`；日志维护失败只会写入 healthcheck log，不会阻断 canary/contract 检查，也不会触发重启。
+
+通过 `npm run rollout:live -- --apply --install-external-healthcheck` 安装的
+wrapper 会默认设置 `CCPA_LOG_PATHS`，同时覆盖 `/tmp/ccpa.*` 和
+`$HOME/ccpa/logs/launchd.{stdout,stderr}.log`，让本机与 50.9 的 launchd 日志
+都进入同一套脱敏和轮转维护。
 
 本地 launchd 日志可以定期跑仓库内的维护脚本：
 
