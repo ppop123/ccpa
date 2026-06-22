@@ -193,11 +193,11 @@ src/
 ├─ providers/          model-prefix 路由 → 选哪个上游
 │   ├─ router.ts       resolveProviderFromModel (29 行，前缀匹配)
 │   ├─ types.ts        Provider/ProviderModel 接口
-│   ├─ claude.ts       ClaudeProvider + CLAUDE_MODELS 8 alias hardcode
+│   ├─ claude.ts       ClaudeProvider + config/default Claude model registry
 │   ├─ codex.ts        CodexProvider 入口类
 │   ├─ codex-chat.ts   chat completions ↔ Responses API 转译 (~550 行)
 │   ├─ codex-sse.ts    Responses SSE 流，mergeOutputItem 通用处理
-│   ├─ codex-request.ts  normalize role + 强制 store=false
+│   ├─ codex-request.ts  normalize role + configurable default store
 │   ├─ codex-responses.ts  /v1/responses 端点
 │   ├─ codex-images.ts     /v1/images/generations 端点
 │   ├─ codex-upstream.ts   fetch chatgpt.com (2 attempts)
@@ -512,7 +512,7 @@ curl -sS -X POST http://127.0.0.1:8317/v1/messages/count_tokens \
 
 ### GET /v1/models
 
-列 11 个模型（5 个 claude 全名 + 3 个 claude alias + 3 个 codex），逻辑在 `src/server.ts:249-260`，源是 `ClaudeProvider.listModels()` 拼 `CodexProvider.listModels()`。
+返回当前配置暴露的模型列表。默认 Claude 集是 8 条（5 个具体名 + 3 个 alias），Codex 列表来自 `config.yaml` 的 `codex.models[]`，所以总数随机器配置变化：本机常见 11 条，50.9 当前 canary 为 13 条。逻辑源是 `ClaudeProvider.listModels()` 拼 `CodexProvider.listModels()`。
 
 **响应**：`{object: "list", data: [{id, object: "model", created, owned_by}]}`。`owned_by` 是 `"anthropic"` 或 `"openai"`。
 
@@ -520,7 +520,7 @@ curl -sS -X POST http://127.0.0.1:8317/v1/messages/count_tokens \
 curl -sS http://127.0.0.1:8317/v1/models -H "Authorization: Bearer sk-XXX"
 ```
 
-实测 11 条全列出，详见"模型"section。
+用 canary 或下面命令看当前运行态实际条数，详见"模型"section。
 
 ---
 
@@ -549,7 +549,7 @@ curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8317/
 
 需要 api-key（`/admin` 走同一鉴权中间件，`src/server.ts:190`）。返聚合的账号快照 + 各 provider 状态（`src/server.ts:271-281`）。
 
-**响应**：`{server: {provider_status, providers: {...}}, accounts: [{email, available, cooldownUntil, failureCount, lastError, lastSuccessAt, lastRefreshAt, totalRequests, totalSuccesses, totalFailures, expiresAt, refreshing}], account_count, claude: {...}, codex: {...}, generated_at}`。
+**响应**：`{server: {provider_status, providers: {...}}, accounts: [{email, available, cooldownUntil, failureCount, refreshFailureCount, nextRefreshAttemptAt, lastError, lastSuccessAt, lastRefreshAt, totalRequests, totalSuccesses, totalFailures, expiresAt, refreshing}], account_count, claude: {...}, codex: {...}, generated_at}`。
 
 ```bash
 curl -sS http://127.0.0.1:8317/admin/accounts -H "Authorization: Bearer sk-XXX"
@@ -626,9 +626,9 @@ curl -sS -o /dev/null -w 'monitor: %{http_code}, content-type: %{content_type}\n
 
 ## 4. 模型矩阵与路由
 
-### 11 个 model 一览
+### model 一览
 
-`GET /v1/models` 返回 11 条记录（8 个 claude 别名/具体名 + 3 个 codex）。下表把每个 model 的上游、用途、能力位都标清楚（cache 列特指 prompt caching；codex 路径没启用 cache_control，所以全 N）。
+`GET /v1/models` 的条数是配置驱动的：Claude 默认 8 条，Codex 按 `config.yaml` / `config.example.yaml` 的 `codex.models[]` 暴露；50.9 额外配置了更多 Codex alias 时会看到 13 条。下表列出当前常用模型和能力位（cache 列特指 prompt caching；codex 路径没启用 cache_control，所以全 N）。
 
 | model id | alias 等价 | 上游 provider | 用途 | tools | stream | prompt caching |
 |---|---|---|---|---|---|---|
@@ -642,9 +642,9 @@ curl -sS -o /dev/null -w 'monitor: %{http_code}, content-type: %{content_type}\n
 | `haiku` | (alias→`claude-haiku-4-5-20251001`) | anthropic | chat | Y | Y | Y |
 | `gpt-5.4` | — | codex | chat | Y | Y | N |
 | `gpt-5.5` | — | codex | chat | Y | Y | N |
-| `gpt-image-2` | — | codex | image | N（内置 image_generation tool） | 部分（P3 限制） | N |
+| `gpt-image-2` | — | codex | image | N（内置 image_generation tool） | Y（chat/responses stream partial image 已转换；images 端点非流式） | N |
 
-注意 `claude-haiku-4-5` 和 `claude-haiku-4-5-20251001` 是同一个上游 model，但 `/v1/models` 把它们当两条返回（claude.ts:9-18 的 hardcode 列了两条）；实测请求 `claude-haiku-4-5` 响应里 `model` 字段会被改写成 `claude-haiku-4-5-20251001`，因为 translator.ts:12 的 MODEL_ALIASES 做了归一。
+注意 `claude-haiku-4-5` 和 `claude-haiku-4-5-20251001` 是同一个上游 model，但默认配置把它们当两条返回；实测请求 `claude-haiku-4-5` 响应里 `model` 字段会被改写成 `claude-haiku-4-5-20251001`，因为 translator.ts 的 `MODEL_ALIASES` 做了归一。
 
 ### 路由规则
 
@@ -660,7 +660,7 @@ const CODEX_PREFIXES = ["gpt-", "codex-"];
 // 其它 → null（400 unsupported_model）
 ```
 
-裸 alias `opus` / `sonnet` / `haiku` **不走** prefix 路由，它们靠 `ClaudeProvider.supportsModel()`（claude.ts:38-49）单独识别——`CLAUDE_MODELS.includes(normalized)` 那一支兜住。所以加新别名必须进入 Claude model 配置或默认模型集，否则请求会在本地返回 400 `unsupported_model`。
+裸 alias `opus` / `sonnet` / `haiku` **不走** prefix 路由，它们靠 `ClaudeProvider.supportsModel()` 单独识别。所以加新别名必须进入 `claude.models[]` 或默认模型集，否则请求会在本地返回 400 `unsupported_model`。
 
 进了 claude provider 之后，translator.ts:15-17 的 `resolveModel()` 把 alias 翻成具体上游 model 名再丢给 Anthropic API。MODEL_ALIASES 全集：
 
@@ -681,7 +681,7 @@ const CODEX_PREFIXES = ["gpt-", "codex-"];
 
 ### model 来源
 
-- **claude 列表** 是 hardcode：`src/providers/claude.ts:9-18` 的 `CLAUDE_MODELS` tuple，加新型号要改源码 + 重编译。
+- **claude 列表** 走配置：`config.yaml` / `config.example.yaml` 的 `claude.models[]`；如果省略该段，运行时使用 `src/config.ts` 的 `DEFAULT_CLAUDE_MODELS`。
 - **codex 列表** 走配置：`config.yaml` 的 `codex.models[]`，启动时 `CodexProvider` 读进来生成 `/v1/models` 输出，加新型号改 yaml 重启即可：
 
 ```yaml
@@ -751,11 +751,11 @@ r = c.chat.completions.create(
 
 ### 加新模型
 
-**claude 系列**（必须改源码）：
+**claude 系列**（改配置即可；只有新增 alias resolve 规则才需要改 `translator.ts`）：
 
-1. 编辑 `src/providers/claude.ts:9` 的 `CLAUDE_MODELS` tuple，把新 id 加进去。
-2. 如果是别名再加进 `src/proxy/translator.ts:5` 的 `MODEL_ALIASES`，让它能 resolve 到真名。
-3. `npm run build` 重编译。
+1. 编辑 `config.yaml` 的 `claude.models[]`，把新 id 加进去。
+2. 如果是裸 alias（例如 `opus-new`）再加进 `src/proxy/translator.ts` 的 `MODEL_ALIASES`，让它能 resolve 到真名。
+3. 改配置后重启；若改了源码则先 `npm run build` 重编译。
 4. `launchctl kickstart -k gui/$(id -u)/com.wy.ccpa` 重启。
 
 **codex 系列**（改配置即可）：
@@ -1025,12 +1025,11 @@ curl -sS http://127.0.0.1:8317/health
 # 模型列表（要带 api-key, 见 config.yaml api-keys）
 KEY=sk-XXX
 curl -sS -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1/models
-# 应返回 11 个模型（claude-* + gpt-*）
+# 应返回当前配置暴露的模型；本机常见 11 个，50.9 当前为 13 个
 
 # 账号状态
 curl -sS -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/admin/accounts
-# 看 cooldownUntil / failureCount / lastError / expiresAt / refreshing；
-# refresh backoff 的下一次尝试时间主要看 stderr 里的 "next attempt in ..."
+# 看 cooldownUntil / failureCount / refreshFailureCount / nextRefreshAttemptAt / lastError / expiresAt / refreshing
 ```
 
 不带 key 会返 `{"error":{"message":"Missing API key"}}`，这是正常的。
@@ -1605,7 +1604,7 @@ grep -n 'rate-limit\|rateLimit\|rate_limit' /Users/wy/auth2api/src/server.ts
 **缺漏 topic（建议下一轮补）**：
 
 - 代码示例里曾 hardcode 真实 api key，作为对外文档（即使内部）建议统一改成 `sk-XXX` 占位 + 注明 '从 ~/auth2api/config.yaml api-keys[0] 读取'，避免随手 copy 流出仓库
-- section 完全没提 /v1/models 端点（实测 11 个 model：5 个 claude alias、3 个短别名 opus/sonnet/haiku、gpt-5.4、gpt-5.5、gpt-image-2），业务侧做模型探测要用
+- section 完全没提 /v1/models 端点（历史 verifier 备注；2026-06-22 正文已补，且模型数改为配置驱动：本机常见 11、50.9 当前 13），业务侧做模型探测要用
 - reasoning_effort / thinking 参数（translator.ts:21-23 EFFORT_TO_BUDGET：none/low/medium/high/xhigh→0/1024/8192/24576/32768）业务侧怎么传没提，opus 走 thinking 是常见场景
 - ccpa 没有 anthropic 原生 /v1/messages 端点的提及（section 默认所有人都用 openai 兼容接口，但 ccpa 实际同时支持 anthropic 原生 schema，对接 SDK 时可以选）
 - ccpa 错误返回 SSE 还是 JSON 的区分（stream=true 时 error 是 'event: error\ndata: {...}'，section 的 chat_stream 没处理 error 事件，遇到 401/429 会被静默丢掉）
@@ -1631,8 +1630,7 @@ grep -n 'rate-limit\|rateLimit\|rate_limit' /Users/wy/auth2api/src/server.ts
   - 问题：src/auth/oauth.ts:6 写 `REDIRECT_URI = "http://localhost:54545/callback"`，redirect_uri 是 `localhost`（不是 `127.0.0.1`），浏览器会跳到 `http://localhost:54545/callback?code=...&state=...`。
   - 修正：改成 `http://localhost:54545/callback?code=...&state=...`。
 - 声明：Section 3 admin/accounts 『看 cooldown / failureCount / nextRefreshAttemptAt』
-  - 问题：查 src/accounts/manager.ts:43-57 的 AccountSnapshot 定义和实际 curl 输出，/admin/accounts 返回的字段只有 cooldownUntil/failureCount/lastError/lastFailureAt/lastSuccessAt/lastRefreshAt/totalRequests/totalSuccesses/totalFailures/expiresAt/refreshing。`nextRefreshAttemptAt` 只在内部 AccountState（line 40）使用，*不* 出现在 HTTP 响应里。
-  - 修正：把 `nextRefreshAttemptAt` 去掉，或者改成『cooldownUntil / failureCount / lastError』。如果想看 refresh 退避就只能从 stderr `next attempt in Ns` 里看。
+  - 2026-06-22 复核：这条 verifier 结论已经过期。当前 `AccountSnapshot` 和 canary/admin 解析都包含 `refreshFailureCount` / `nextRefreshAttemptAt`；`/admin/accounts` 可直接看 refresh backoff 下一次尝试时间，不需要只靠 stderr。
 - 声明：Section 5 『ccpa 端不需要重启，CodexAuthStore 每次请求 re-read auth-file』
   - 问题：src/providers/codex-auth.ts:48-67 的 CodexAuthStore.load() 用 stat 比较 mtimeMs，**只有 mtime 变化才 re-read**，并不是『每次请求都 re-read』。如果 codex CLI 在原地写文件且 mtime 真的变了，是会被发现的；但说『每次请求都 re-read』在技术上不准确。
   - 修正：改成『CodexAuthStore 用 mtime 缓存，codex CLI 续期改动 auth.json 后下一次请求会自动 re-read，无需 ccpa 重启』。
