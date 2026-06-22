@@ -8,12 +8,14 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 ## Current Verified State
 
 - Local repo: `/Users/wy/auth2api`
-- Local branch: `main`
-- Local HEAD before the candidate: `7915477`
+- Local branch: `codex/ccpa-stabilization`
+- Current verified runtime commit: `caea69d Thread build commit through rollout gates`
+- Current verified runtime full commit: `caea69d7c6468880f1d80c54a70bc0be996622b3`
 - Primary push remote for this product fork: `ccpa https://github.com/ppop123/ccpa.git`
-- Local live service: strict `npm run release:verify -- --require-provider-status ok` passed with `release_verify: yes`
-- 50.9 live service: strict canary reports `admin/accounts: ok (2/2 providers available)`
-- 50.9 release gate: strict `npm run release:verify -- --require-provider-status ok` passed with `release_verify: yes`
+- Local branch: pushed to `ccpa/codex/ccpa-stabilization`; use `git status --short --branch` and `npm run release:readiness -- --list` for the latest docs/source candidate state.
+- Local live service: running `caea69d7c6468880f1d80c54a70bc0be996622b3` with `git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit caea69d...` passed with `release_verify: yes`
+- 50.9 live service: healthy from `/Users/wangyan/ccpa`, strict canary reports `admin/accounts: ok (2/2 providers available)` and 13 models, but it is still the dirty live tree rather than the latest clean candidate.
+- 50.9 clean candidate: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529` is checked out at `caea69d7c6468880f1d80c54a70bc0be996622b3`; temporary 8318 strict `release:verify -- --require-provider-status ok --require-build-commit caea69d...` passed and the temporary server was stopped.
 - Dependency audit: local and 50.9 `npm audit --json` both report 0 vulnerabilities
 - Config security posture: local and 50.9 `npm run security:posture` both report `findings: 0`, `security_posture: yes`; both warn that all-interface intranet bind is running without local rate limiting.
 - Phase 169 note: explicit custom or empty `claude.models` is now enforced in both provider support checks and server routing; default built-in Claude models still allow future `claude-*` IDs.
@@ -25,36 +27,33 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 - Phase 175 note: `npm run release:verify` now includes `npm run security:audit`, so moderate-or-higher npm advisories fail the default release gate.
 - Phase 176 note: `npm run release:verify` now includes `npm run upstream:matrix` dry-run, so the real-upstream acceptance harness is checked without spending subscription quota.
 - Phase 177 note: `npm run release:verify` now includes `npm run security:posture`, so missing, placeholder, or weak client API keys fail before live preflight. Intranet all-interface bind without local rate limiting remains a warning when strong API keys are configured.
+- Phase 181 note: multiple `auth-dir/claude-*.json` token files are supported; CCPA chooses the first non-expired, non-cooldown Claude account and persists non-secret runtime backoff/counter state.
+- Phase 182 note: `release:verify` strips `CCPA_*` runtime env from typecheck/test/diff/script-syntax steps while still allowing preflight/security posture to use explicit runtime config.
+- Phase 183 note: `/health` exposes non-secret `build.git_commit`, `git_branch`, `git_dirty`, and `built_at` metadata when `dist/build-info.json` exists.
+- Phase 184 note: `--require-build-commit <sha>` is now a first-class option for canary, rollout preflight, live rollout, and release verify.
 
 ## Candidate Shape
 
-Latest local readiness manifest:
+Latest local readiness:
 
-- Path: `/tmp/ccpa-release-readiness-phase177.json`
-- `releaseReady`: `true`
-- `candidateFiles`: 85
-- `transientArtifacts`: 0
+- Command: `npm run release:readiness -- --list`
+- `release_ready: yes`
+- `modified: 0`
+- `untracked candidates: 0`
+- `transient artifacts: 0 visible`
 
-Latest 50.9 readiness manifest:
+Latest 50.9 clean candidate readiness:
 
-- Path: `/tmp/ccpa-release-readiness-phase177-50_9.json`
-- `releaseReady`: `true`
-- `candidateFiles`: 99
-- `transientArtifacts`: 0
+- Candidate path: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`
+- Commit: `caea69d7c6468880f1d80c54a70bc0be996622b3`
+- Strict release gate: passed on temporary `127.0.0.1:8318`
+- Temporary port cleanup: `port_8318_clear`
 
-The remote candidate is broader because 50.9 still has extra local source/test/other files, including root-level historical handoff/script copies. Treat the local `/Users/wy/auth2api` candidate as the source of truth for code review and commits unless explicitly deciding to reconcile remote-only artifacts.
+Treat the local `/Users/wy/auth2api` branch and the remote clean candidate above as the code source of truth. The 50.9 live tree remains a separate operational deployment target and should not be normalized by staging remote-only historical files.
 
 ## Review Buckets
 
-The local release readiness bucket summary is:
-
-- `runtime-source`: 33 files
-- `tests`: 29 files
-- `scripts`: 11 files
-- `docs`: 8 files including this handoff note
-- `project-config`: 4 files
-
-Use `npm run release:readiness -- --list` for the authoritative current file list. Do not hand-maintain candidate paths from this document.
+The local worktree is currently clean, so `release:readiness -- --list` reports no candidate buckets. Use git history plus the release gates, not this document, for authoritative file lists.
 
 ## Safe Verification Commands
 
@@ -62,7 +61,10 @@ These commands are no-upstream or dry-run only:
 
 ```bash
 npm run release:readiness -- --list
-npm run release:verify -- --require-provider-status ok
+COMMIT="$(git rev-parse HEAD)"
+npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"
+npm run rollout:preflight -- --require-provider-status ok --require-build-commit "$COMMIT"
+npm run canary -- --require-provider-status ok --require-build-commit "$COMMIT"
 npm run secrets:scan
 npm run security:posture
 npm run security:audit
@@ -76,12 +78,9 @@ git diff --check
 Remote 50.9 equivalents should run with the non-login PATH:
 
 ```bash
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm run release:verify -- --require-provider-status ok'
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm run secrets:scan'
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm run security:posture'
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm run security:audit'
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm run upstream:matrix'
-ssh wangyan@192.168.50.9 'export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; cd /Users/wangyan/ccpa && npm audit --json'
+ssh wangyan@192.168.50.9 'PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm --version'
+ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa && PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run canary -- --url http://127.0.0.1:8317 --require-provider-status ok'
+ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529 && CCPA_BASE_URL=http://127.0.0.1:8318 CCPA_CONFIG=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.candidate.yaml PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run release:verify -- --require-provider-status ok --require-build-commit caea69d7c6468880f1d80c54a70bc0be996622b3'
 ```
 
 ## Quota-Spending Commands
@@ -103,20 +102,20 @@ Preferred next release workflow:
    ```
 2. Run strict local gate:
    ```bash
-   npm run release:verify -- --require-provider-status ok
+   COMMIT="$(git rev-parse HEAD)"
+   npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"
    ```
 3. Optionally run quota-spending upstream matrix after explicit approval.
-4. Create review commits from the local candidate. Reasonable commit split:
-   - runtime protocol/provider/account changes
-   - operational scripts and release gates
-   - tests
-   - docs/config
-5. Push to `ccpa` remote or open a PR from a `codex/` branch.
+4. Keep pushing stabilization commits to `ccpa/codex/ccpa-stabilization`.
+5. For 50.9 live cutover, choose one explicit operational path:
+   - switch LaunchAgent to the verified clean candidate path, using the live `config.yaml`;
+   - or back up and normalize `/Users/wangyan/ccpa` to the stabilization branch.
+6. After cutover, run canary/release verify with `--require-build-commit <expected-sha>` from the deployed path.
 
-Avoid staging remote-only `.bak` files from 50.9 unless a separate cleanup/reconciliation decision is made.
+Avoid staging remote-only `.bak` files or root-level historical handoff copies from 50.9 unless a separate cleanup/reconciliation decision is made.
 
 ## Remaining Product Gaps
 
 - True upstream acceptance is still dry-run only until `upstream:matrix --apply` is explicitly approved and passes.
-- The current candidate is verified but still uncommitted; release rollback is therefore based on tar backups and dirty-worktree state, not git commits.
-- Claude multi-account pooling remains a future capacity feature, not a blocker for current self-use stability.
+- 50.9 live has not yet been cut over to `caea69d`; it is healthy but still runs `/Users/wangyan/ccpa` dirty tree.
+- `/v1/embeddings` intentionally returns JSON `endpoint_not_implemented`; actual embeddings generation is still not implemented.
