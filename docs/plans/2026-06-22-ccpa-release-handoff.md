@@ -9,13 +9,13 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 
 - Local repo: `/Users/wy/auth2api`
 - Local branch: `codex/ccpa-stabilization`
-- Current verified runtime commit: `caea69d Thread build commit through rollout gates`
-- Current verified runtime full commit: `caea69d7c6468880f1d80c54a70bc0be996622b3`
+- Current runtime identity is verified by command, not by this static file: run `COMMIT="$(git rev-parse HEAD)"` and then `npm run canary -- --require-provider-status ok --require-build-commit "$COMMIT"` from the deployed tree.
+- Phase 184 example runtime commit before this handoff refresh: `caea69d Thread build commit through rollout gates`.
 - Primary push remote for this product fork: `ccpa https://github.com/ppop123/ccpa.git`
 - Local branch: pushed to `ccpa/codex/ccpa-stabilization`; use `git status --short --branch` and `npm run release:readiness -- --list` for the latest docs/source candidate state.
-- Local live service: running `caea69d7c6468880f1d80c54a70bc0be996622b3` with `git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit caea69d...` passed with `release_verify: yes`
+- Local live service: after `npm run rollout:live -- --apply --require-build-commit "$COMMIT"`, `/health.build.git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"` passed with `release_verify: yes`
 - 50.9 live service: healthy from `/Users/wangyan/ccpa`, strict canary reports `admin/accounts: ok (2/2 providers available)` and 13 models, but it is still the dirty live tree rather than the latest clean candidate.
-- 50.9 clean candidate: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529` is checked out at `caea69d7c6468880f1d80c54a70bc0be996622b3`; temporary 8318 strict `release:verify -- --require-provider-status ok --require-build-commit caea69d...` passed and the temporary server was stopped.
+- 50.9 clean candidate: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529` has passed temporary 8318 strict `release:verify -- --require-provider-status ok --require-build-commit <expected-sha>`; update it to the current pushed commit and re-run the same gate before any live cutover.
 - Dependency audit: local and 50.9 `npm audit --json` both report 0 vulnerabilities
 - Config security posture: local and 50.9 `npm run security:posture` both report `findings: 0`, `security_posture: yes`; both warn that all-interface intranet bind is running without local rate limiting.
 - Phase 169 note: explicit custom or empty `claude.models` is now enforced in both provider support checks and server routing; default built-in Claude models still allow future `claude-*` IDs.
@@ -45,7 +45,7 @@ Latest local readiness:
 Latest 50.9 clean candidate readiness:
 
 - Candidate path: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`
-- Commit: `caea69d7c6468880f1d80c54a70bc0be996622b3`
+- Commit: use `git rev-parse HEAD` inside the candidate worktree and require that value in canary/release verify
 - Strict release gate: passed on temporary `127.0.0.1:8318`
 - Temporary port cleanup: `port_8318_clear`
 
@@ -80,7 +80,7 @@ Remote 50.9 equivalents should run with the non-login PATH:
 ```bash
 ssh wangyan@192.168.50.9 'PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm --version'
 ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa && PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run canary -- --url http://127.0.0.1:8317 --require-provider-status ok'
-ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529 && CCPA_BASE_URL=http://127.0.0.1:8318 CCPA_CONFIG=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.candidate.yaml PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run release:verify -- --require-provider-status ok --require-build-commit caea69d7c6468880f1d80c54a70bc0be996622b3'
+ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529 && COMMIT="$(git rev-parse HEAD)" && CCPA_BASE_URL=http://127.0.0.1:8318 CCPA_CONFIG=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.candidate.yaml PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"'
 ```
 
 ## Quota-Spending Commands
@@ -117,5 +117,5 @@ Avoid staging remote-only `.bak` files or root-level historical handoff copies f
 ## Remaining Product Gaps
 
 - True upstream acceptance is still dry-run only until `upstream:matrix --apply` is explicitly approved and passes.
-- 50.9 live has not yet been cut over to `caea69d`; it is healthy but still runs `/Users/wangyan/ccpa` dirty tree.
+- 50.9 live has not yet been cut over to the latest verified clean candidate; it is healthy but still runs `/Users/wangyan/ccpa` dirty tree.
 - `/v1/embeddings` intentionally returns JSON `endpoint_not_implemented`; actual embeddings generation is still not implemented.
