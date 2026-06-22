@@ -350,7 +350,7 @@ ssh wangyan@192.168.50.9 'curl -sS http://127.0.0.1:8317/health'
 | 维度 | 本机 (wy) | 50.9 (wangyan) |
 | --- | --- | --- |
 | 用户 / uid | `wy` / 503 | `wangyan` / 501 |
-| 项目目录 | `~/auth2api/` | `~/ccpa/` |
+| 项目目录 | `~/auth2api/` | live 已指向 `~/ccpa-candidates/f3afdf0-20260622165529`；`~/ccpa/` 仅作历史回滚材料 |
 | Git remote | `ccpa` + `fork` + `origin` 三个 | 单 `origin = ppop123/ccpa` |
 | 当前 commit | `codex/ccpa-stabilization`；以 `npm run canary -- --require-build-commit "$(git rev-parse HEAD)"` 实测为准 | live 已指向 `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`；每次更新前都要重新以 `git rev-parse HEAD` + build commit gate 验证 |
 | Node 路径 | `~/.nvm/versions/node/v22.14.0/bin/node` | `/opt/homebrew/bin/node` |
@@ -360,12 +360,12 @@ ssh wangyan@192.168.50.9 'curl -sS http://127.0.0.1:8317/health'
 | Port | 8317 | 8317（局域网可达） |
 | api-key | `sk-XXX` | `sk-REMOTE-XXX` |
 | Log 路径 | `/tmp/ccpa.{stdout,stderr}.log` | `~/ccpa/logs/launchd.{stdout,stderr}.log` |
-| Token 文件 | `~/.auth2api/claude-<account>.json` | 两边可登同一 Claude 订阅 |
-| Codex auth | `~/.codex/auth.json`（本机 codex CLI） | `~/.codex/auth.json`（50.9 codex CLI） |
+| Claude token | `~/.auth2api/claude-<account>.json`（CCPA 自己的 Claude OAuth token） | `~/.auth2api/claude-<account>.json`（CCPA 自己的 Claude OAuth token） |
+| Codex auth | `~/.codex/auth.json`（复用本机 codex CLI 状态） | `~/.codex/auth.json`（复用 50.9 codex CLI 状态） |
 | 主要调用方 | 本机业务脚本（兜底） | 菲姐 OpenClaw、加贺 / 浪矢 / 汤川 agent、podcast、老外看中国 |
 | 连通性 | `http://127.0.0.1:8317` | `http://192.168.50.9:8317`（局域网内） |
 
-两边 token 文件可以用同一个 Claude 账号：业务上是同一订阅、各自跑 refresh、互不知道对方。如果一边把 refresh_token 用废了（Anthropic 旋转 refresh_token），另一边下次 refresh 也会跟着挂 —— 排查时先看 `last_refresh` 和 `expired` 字段对齐情况。
+CCPA 的 Claude provider **不直接复用 Claude Code 的 `~/.claude` 登录态**；它使用 `~/.auth2api/claude-*.json` 下的 Claude OAuth token。两边可以登录同一个 Claude 订阅账号，但 token 文件各自 refresh、互不同步。如果一边把 refresh_token 用废了（Anthropic 旋转 refresh_token），另一边下次 refresh 也可能跟着挂 —— 排查时先看 `last_refresh` 和 `expired` 字段。Codex provider 不同：它复用 `~/.codex/auth.json`，也就是 codex CLI 维护的登录状态。
 
 <details><summary>本节事实验证命令（粘贴重跑可核对）</summary>
 
@@ -1028,24 +1028,27 @@ curl -sS -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1/models
 
 # 账号状态
 curl -sS -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/admin/accounts
-# 看 cooldown / failureCount / nextRefreshAttemptAt
+# 看 cooldownUntil / failureCount / lastError / expiresAt / refreshing；
+# refresh backoff 的下一次尝试时间主要看 stderr 里的 "next attempt in ..."
 ```
 
 不带 key 会返 `{"error":{"message":"Missing API key"}}`，这是正常的。
 
 ### 4. Claude token 过期 / refresh 失败 → 重 OAuth
 
-何时用：`/tmp/ccpa.stderr.log` 反复出 `Token refresh failed: fetch failed`，或 token 文件 `expired` 早于 now。我刚看 stderr 就是这状态（`failure #2, next attempt in 120s`），但当前 `expired=2026-06-09T11:36:15Z` 还有 ~4h 才到，所以业务还能跑；真过期了才必须重 oauth。
+何时用：`/tmp/ccpa.stderr.log` 反复出 `Token refresh failed: fetch failed`，或 token 文件 `expired` 早于当前时间。`expired` / `last_refresh` 是 UTC ISO 时间；不要凭日志里的旧样例判断当前状态，直接读 token 元数据和 `/admin/accounts`。
 
 ```bash
 # 看 token 元数据，不输出 access_token / refresh_token
 python3 -c 'import glob,json,os; [print("claude token", json.load(open(p)).get("expired"), json.load(open(p)).get("last_refresh"), json.load(open(p)).get("type")) for p in glob.glob(os.path.expanduser("~/.auth2api/claude-*.json"))]'
 # expired/last_refresh 字段是 ISO 时间；expired < now 就是过期
 
-# 停 ccpa 释放 54545 端口
+# 建议先停 ccpa，避免自动 refresh 和手动 login 同时写同一份 token 文件。
+# --manual 模式本身不会监听 54545；自动模式才会启本地 callback server。
 launchctl bootout gui/$(id -u)/com.wy.ccpa
 
-# 走 Surge 代理重 oauth（Anthropic 国内不通，必须挂代理）
+# 走代理重 oauth。当前实现会在 shell env 缺失时尝试从 LaunchAgent plist
+# 读取 HTTPS_PROXY/HTTP_PROXY；显式传 env 仍是最稳的排障写法。
 cd ~/auth2api
 HTTPS_PROXY=http://127.0.0.1:6152 HTTP_PROXY=http://127.0.0.1:6152 \
   node dist/index.js --login --manual
@@ -1062,13 +1065,13 @@ python3 -c 'import glob,json,os; [print(json.load(open(p)).get("expired"), json.
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.wy.ccpa.plist
 ```
 
-坑：`--login` 必须显式设 `HTTPS_PROXY`，plist 里的 env 不会注入到手动 node 进程里（已知 P3）。
+50.9 当前不靠 `HTTPS_PROXY` 环境变量；如果以后换成需要代理的网络，再按同样方式检查 plist 或 shell env。
 
 ### 5. Codex token 报错处理
 
-Codex token 在 `~/.codex/auth.json`，由 codex CLI 自动续期，**ccpa 不管 refresh**。报错形式：
+Codex token 在 `~/.codex/auth.json`，由 codex CLI 维护。CCPA 只读不写；上游 401 时会丢弃当前内存快照、重新读取一次 `auth.json` 并重试。如果 codex CLI 没有把文件刷新好，重试仍会失败，这时需要重新 `codex login`。
 
-- 业务请求 `gpt-5.5` 收到上游 `401 Unauthorized`（ccpa 无 retry，直接透）
+- 业务请求 `gpt-5.5` 收到上游 `401 Unauthorized`（重读 auth file 后仍失败）
 - `/tmp/ccpa.stderr.log` 出 codex upstream 401
 
 救援：
@@ -1379,7 +1382,7 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 |---|---|---|
 | codex stream 不支持 image_generation `partial_image` 流式渲染 | **closed**：chat/responses stream 已保留/转换 image partial，并对 partial/done 重复图片去重 | 真图片质量仍建议用 `/v1/images/generations` 或专门图片 provider 验收 |
 | `store=false` hardcode | **closed**：`codex.store` 已进入配置，客户端显式 `store` 优先 | 保持默认 false，除非明确要让 Codex 上游存储 |
-| `--login` 必须显式 `export HTTPS_PROXY` | **closed**：Codex login 子进程已从 LaunchAgent plist `EnvironmentVariables` 读取 proxy env fallback，shell 显式 env 优先 | 换机器部署时检查 plist/env 是否和代理端口一致 |
+| `--login` 必须显式 `export HTTPS_PROXY` | **closed**：Claude `--login` / server startup / Codex login 都会在 shell env 缺失时从 LaunchAgent plist `EnvironmentVariables` 读取 proxy env fallback，shell 显式 env 优先 | 换机器部署时检查 plist/env 是否和代理端口一致 |
 | codex `tool_choice` 字符串 passthrough 未验证 | **closed**：本地校验已拒绝非法 `tool_choice`，合法字符串按 OpenAI 兼容语义转换 | 新增 tool 类型时扩展目标测试 |
 | codex 上游 401 时无 refresh | **closed**：Codex chat/responses/images 三条路径已接入一次性 auth cache invalidation/reload/retry | 仍依赖 Codex CLI 或用户登录态能刷新 `~/.codex/auth.json` |
 
