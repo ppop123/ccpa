@@ -2,6 +2,28 @@ import { ProviderName } from "../providers/types";
 
 export type UsageProvider = ProviderName | "unknown";
 
+export interface UsageRequestSummary {
+  bodyKeys: string[];
+  stream: boolean;
+  messageCount: number | null;
+  inputCount: number | null;
+  systemCount: number | null;
+  toolCount: number | null;
+  maxTokens: number | null;
+  reasoningEffort: string | null;
+}
+
+export interface UsageFailureContext {
+  stage: string;
+  kind: string;
+  message: string;
+  upstreamStatus: number | null;
+  accountEmail: string | null;
+  accountLastError: string | null;
+  cooldownUntil: number | null;
+  requestSummary: UsageRequestSummary;
+}
+
 export interface UsageRecord {
   id: number;
   timestamp: string;
@@ -18,6 +40,9 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  failureContext?: UsageFailureContext | null;
 }
 
 export interface UsageCounter {
@@ -27,6 +52,9 @@ export interface UsageCounter {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  cacheHitRate: number;
   lastRequestAt: string | null;
 }
 
@@ -55,6 +83,9 @@ function createCounter(): UsageCounter {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheHitRate: 0,
     lastRequestAt: null,
   };
 }
@@ -66,6 +97,10 @@ function updateCounter(counter: UsageCounter, record: UsageRecord): void {
   counter.inputTokens += record.inputTokens;
   counter.outputTokens += record.outputTokens;
   counter.totalTokens += record.totalTokens;
+  counter.cacheCreationInputTokens += record.cacheCreationInputTokens;
+  counter.cacheReadInputTokens += record.cacheReadInputTokens;
+  counter.cacheHitRate =
+    counter.inputTokens > 0 ? counter.cacheReadInputTokens / counter.inputTokens : 0;
   counter.lastRequestAt = record.timestamp;
 }
 

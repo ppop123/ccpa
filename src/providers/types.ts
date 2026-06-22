@@ -20,6 +20,7 @@ export interface Provider {
   getStatus(): ProviderStatus;
   handleChatCompletions(): express.RequestHandler;
   handleResponses(): express.RequestHandler;
+  handleImageGenerations?(): express.RequestHandler;
   handleMessages?(): express.RequestHandler;
   handleCountTokens?(): express.RequestHandler;
 }

@@ -1,14 +1,16 @@
 import express from "express";
-import { Config } from "../config";
+import { CodexConfig, Config } from "../config";
 import { CodexAuthError, CodexAuthStore, resolveDefaultCodexAuthFile } from "./codex-auth";
 import { createCodexChatCompletionsHandler } from "./codex-chat";
+import { createCodexImageGenerationsHandler } from "./codex-images";
 import { createCodexResponsesHandler } from "./codex-responses";
 import { resolveProviderFromModel } from "./router";
 import { Provider, ProviderModel, ProviderStatus } from "./types";
 
-const DEFAULT_CODEX_CONFIG = {
+const DEFAULT_CODEX_CONFIG: CodexConfig = {
   enabled: true,
   "auth-file": "~/.codex/auth.json",
+  store: false,
   models: [] as string[],
 };
 
@@ -26,6 +28,7 @@ export class CodexProvider implements Provider {
   private readonly codexConfig;
   private readonly chatHandler: express.RequestHandler;
   private readonly responsesHandler: express.RequestHandler;
+  private readonly imageGenerationsHandler: express.RequestHandler;
 
   constructor(private readonly config: Config) {
     this.codexConfig = this.config.codex || DEFAULT_CODEX_CONFIG;
@@ -33,8 +36,13 @@ export class CodexProvider implements Provider {
       this.codexConfig["auth-file"],
       resolveDefaultCodexAuthFile()
     );
-    this.chatHandler = createCodexChatCompletionsHandler(this.authStore);
-    this.responsesHandler = createCodexResponsesHandler(this.authStore);
+    const requestOptions = {
+      defaultStore: this.codexConfig.store,
+      upstreamTimeoutMs: this.config.timeouts["stream-messages-ms"],
+    };
+    this.chatHandler = createCodexChatCompletionsHandler(this.authStore, requestOptions);
+    this.responsesHandler = createCodexResponsesHandler(this.authStore, requestOptions);
+    this.imageGenerationsHandler = createCodexImageGenerationsHandler(this.authStore, requestOptions);
   }
 
   supportsModel(model: string): boolean {
@@ -122,5 +130,9 @@ export class CodexProvider implements Provider {
 
   handleResponses(): express.RequestHandler {
     return this.responsesHandler;
+  }
+
+  handleImageGenerations(): express.RequestHandler {
+    return this.imageGenerationsHandler;
   }
 }

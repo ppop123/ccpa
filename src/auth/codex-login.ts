@@ -3,14 +3,15 @@ import fs from "node:fs";
 import { ChildProcess } from "node:child_process";
 
 import { resolveDefaultCodexAuthFile, resolveCodexAuthFile } from "../providers/codex-auth";
+import { LaunchAgentProxyEnvOptions, buildProxyEnvWithLaunchAgentFallback } from "./proxy-env";
 
 type SpawnLike = (
   command: string,
   args: string[],
-  options: { stdio: "inherit" }
+  options: { stdio: "inherit"; env: NodeJS.ProcessEnv }
 ) => ChildProcess;
 
-interface RunCodexLoginOptions {
+interface RunCodexLoginOptions extends LaunchAgentProxyEnvOptions {
   authFilePath?: string;
   command?: string;
   existsSync?: typeof fs.existsSync;
@@ -21,14 +22,16 @@ export function codexInstallHint(): string {
   return "Codex CLI not found. Install Codex CLI first, then run `codex login` or retry with `--login-codex`.";
 }
 
+
 export async function runCodexLogin(options: RunCodexLoginOptions = {}): Promise<string> {
   const command = options.command || "codex";
   const authFilePath = resolveCodexAuthFile(options.authFilePath || resolveDefaultCodexAuthFile());
   const existsSync = options.existsSync || fs.existsSync;
   const spawn = options.spawn || spawnChildProcess;
+  const env = buildProxyEnvWithLaunchAgentFallback(options);
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, ["login"], { stdio: "inherit" });
+    const child = spawn(command, ["login"], { stdio: "inherit", env });
     let settled = false;
 
     const fail = (error: Error) => {

@@ -1,15 +1,21 @@
 import express from "express";
 import { ProviderName } from "../providers/types";
-import { UsageProvider, UsageTracker } from "./usage";
+import { UsageFailureContext, UsageProvider, UsageRequestSummary, UsageTracker } from "./usage";
 
 type UsageDetails = {
   model: string | null;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
 };
 
 type ProviderResolver = (req: express.Request) => UsageProvider;
+
+type FailureContextInput = Omit<UsageFailureContext, "requestSummary">;
+
+const FAILURE_CONTEXT_KEY = "__usageFailureContext";
 
 function getClientIp(req: express.Request): string {
   const forwardedFor = req.get("x-forwarded-for");
@@ -102,7 +108,89 @@ function classifySource(req: express.Request, clientIp: string, userAgent: strin
   return "direct";
 }
 
+function summarizeRequestBody(body: any): UsageRequestSummary {
+  const objectBody =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+
+  const messages = Array.isArray(objectBody.messages) ? objectBody.messages : null;
+  const input = objectBody.input;
+  const inputs = Array.isArray(input) ? input : null;
+  const maxTokensCandidates = [
+    objectBody.max_tokens,
+    objectBody.max_output_tokens,
+    objectBody.max_completion_tokens,
+  ];
+  const maxTokens = maxTokensCandidates.find((value) => typeof value === "number");
+
+  const systemCountFromMessages = messages
+    ? messages.filter(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          ("role" in item) &&
+          (((item as { role?: unknown }).role === "system") ||
+            ((item as { role?: unknown }).role === "developer"))
+      ).length
+    : null;
+
+  const systemCountFromInput = inputs
+    ? inputs.filter(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          ("role" in item) &&
+          (((item as { role?: unknown }).role === "system") ||
+            ((item as { role?: unknown }).role === "developer"))
+      ).length
+    : null;
+
+  return {
+    bodyKeys: Object.keys(objectBody).sort(),
+    stream: !!objectBody.stream,
+    messageCount: messages ? messages.length : null,
+    inputCount:
+      inputs ? inputs.length : input == null ? null : 1,
+    systemCount: systemCountFromMessages ?? systemCountFromInput,
+    toolCount: Array.isArray(objectBody.tools) ? objectBody.tools.length : null,
+    maxTokens: typeof maxTokens === "number" ? maxTokens : null,
+    reasoningEffort:
+      typeof objectBody.reasoning_effort === "string" ? objectBody.reasoning_effort : null,
+  };
+}
+
+export function setFailureContext(
+  res: express.Response,
+  context: {
+    stage: string;
+    kind: string;
+    message: string;
+    upstreamStatus?: number | null;
+    accountEmail?: string | null;
+    accountLastError?: string | null;
+    cooldownUntil?: number | null;
+  }
+): void {
+  res.locals[FAILURE_CONTEXT_KEY] = {
+    stage: context.stage,
+    kind: context.kind,
+    message: context.message,
+    upstreamStatus: context.upstreamStatus ?? null,
+    accountEmail: context.accountEmail ?? null,
+    accountLastError: context.accountLastError ?? null,
+    cooldownUntil: context.cooldownUntil ?? null,
+  } satisfies FailureContextInput;
+}
+
 function parseJsonUsage(body: any): UsageDetails {
+  const cacheCreationTokens = readNumber(body?.usage?.cache_creation_input_tokens, 0);
+  const cacheReadTokens = readNumber(
+    body?.usage?.cache_read_input_tokens ??
+      body?.usage?.prompt_tokens_details?.cached_tokens ??
+      body?.usage?.input_tokens_details?.cached_tokens,
+    0
+  );
   const promptTokens = body?.usage?.prompt_tokens;
   const completionTokens = body?.usage?.completion_tokens;
   const inputTokens = body?.usage?.input_tokens;
@@ -120,6 +208,8 @@ function parseJsonUsage(body: any): UsageDetails {
         typeof body?.usage?.total_tokens === "number"
           ? body.usage.total_tokens
           : normalizedPrompt + normalizedCompletion,
+      cacheCreationInputTokens: cacheCreationTokens,
+      cacheReadInputTokens: cacheReadTokens,
     };
   }
 
@@ -134,6 +224,8 @@ function parseJsonUsage(body: any): UsageDetails {
         typeof body?.usage?.total_tokens === "number"
           ? body.usage.total_tokens
           : normalizedInput + normalizedOutput,
+      cacheCreationInputTokens: cacheCreationTokens,
+      cacheReadInputTokens: cacheReadTokens,
     };
   }
 
@@ -143,6 +235,8 @@ function parseJsonUsage(body: any): UsageDetails {
       inputTokens: countTokens,
       outputTokens: 0,
       totalTokens: countTokens,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
     };
   }
 
@@ -151,12 +245,22 @@ function parseJsonUsage(body: any): UsageDetails {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
   };
 }
 
 function mergeUsage(base: UsageDetails, next: Partial<UsageDetails>): UsageDetails {
   const inputTokens = typeof next.inputTokens === "number" ? next.inputTokens : base.inputTokens;
   const outputTokens = typeof next.outputTokens === "number" ? next.outputTokens : base.outputTokens;
+  const cacheCreationInputTokens =
+    typeof next.cacheCreationInputTokens === "number"
+      ? next.cacheCreationInputTokens
+      : base.cacheCreationInputTokens;
+  const cacheReadInputTokens =
+    typeof next.cacheReadInputTokens === "number"
+      ? next.cacheReadInputTokens
+      : base.cacheReadInputTokens;
   const totalTokens =
     typeof next.totalTokens === "number"
       ? next.totalTokens
@@ -169,6 +273,8 @@ function mergeUsage(base: UsageDetails, next: Partial<UsageDetails>): UsageDetai
     inputTokens,
     outputTokens,
     totalTokens,
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
   };
 }
 
@@ -207,17 +313,32 @@ function parseSsePayload(block: string, details: UsageDetails): UsageDetails {
       inputTokens: usage?.input_tokens,
       outputTokens: usage?.output_tokens,
       totalTokens: usage?.total_tokens,
+      cacheCreationInputTokens: usage?.cache_creation_input_tokens,
+      cacheReadInputTokens:
+        usage?.cache_read_input_tokens ??
+        usage?.prompt_tokens_details?.cached_tokens ??
+        usage?.input_tokens_details?.cached_tokens,
     });
   }
 
   if (currentEvent === "message_delta") {
+    const usage = payload?.usage;
     return mergeUsage(details, {
-      inputTokens: payload?.usage?.input_tokens,
-      outputTokens: payload?.usage?.output_tokens,
+      inputTokens: usage?.prompt_tokens ?? usage?.input_tokens,
+      outputTokens: usage?.completion_tokens ?? usage?.output_tokens,
       totalTokens:
-        typeof payload?.usage?.input_tokens === "number" || typeof payload?.usage?.output_tokens === "number"
-          ? (payload?.usage?.input_tokens || 0) + (payload?.usage?.output_tokens || 0)
-          : undefined,
+        typeof usage?.total_tokens === "number"
+          ? usage.total_tokens
+          : typeof usage?.prompt_tokens === "number" || typeof usage?.completion_tokens === "number"
+            ? (usage?.prompt_tokens || 0) + (usage?.completion_tokens || 0)
+            : typeof usage?.input_tokens === "number" || typeof usage?.output_tokens === "number"
+              ? (usage?.input_tokens || 0) + (usage?.output_tokens || 0)
+              : undefined,
+      cacheCreationInputTokens: usage?.cache_creation_input_tokens,
+      cacheReadInputTokens:
+        usage?.cache_read_input_tokens ??
+        usage?.prompt_tokens_details?.cached_tokens ??
+        usage?.input_tokens_details?.cached_tokens,
     });
   }
 
@@ -227,10 +348,19 @@ function parseSsePayload(block: string, details: UsageDetails): UsageDetails {
       inputTokens: payload.usage.prompt_tokens ?? payload.usage.input_tokens,
       outputTokens: payload.usage.completion_tokens ?? payload.usage.output_tokens,
       totalTokens: payload.usage.total_tokens,
+      cacheCreationInputTokens: payload.usage.cache_creation_input_tokens,
+      cacheReadInputTokens:
+        payload.usage.cache_read_input_tokens ??
+        payload.usage.prompt_tokens_details?.cached_tokens ??
+        payload.usage.input_tokens_details?.cached_tokens,
     });
   }
 
   return details;
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function parseSseChunks(buffer: string, details: UsageDetails): { details: UsageDetails; rest: string } {
@@ -257,6 +387,7 @@ export function wrapTrackedHandler(
     const startedAt = Date.now();
     const provider =
       typeof options.provider === "function" ? options.provider(req) : options.provider;
+    const requestSummary = summarizeRequestBody(req.body);
     const clientIp = getClientIp(req);
     const userAgent = getUserAgent(req);
     const source = classifySource(req, clientIp, userAgent);
@@ -265,12 +396,22 @@ export function wrapTrackedHandler(
       inputTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
     };
     let sseBuffer = "";
+    let responseErrorMessage: string | null = null;
+    let responseErrorType: string | null = null;
 
     const originalJson = res.json.bind(res);
     (res as any).json = (body: any) => {
       details = mergeUsage(details, parseJsonUsage(body));
+      if (typeof body?.error?.message === "string") {
+        responseErrorMessage = body.error.message;
+      }
+      if (typeof body?.error?.type === "string") {
+        responseErrorType = body.error.type;
+      }
       return originalJson(body);
     };
 
@@ -288,6 +429,28 @@ export function wrapTrackedHandler(
     };
 
     res.once("finish", () => {
+      const explicitFailureContext = res.locals[FAILURE_CONTEXT_KEY] as FailureContextInput | undefined;
+      const failed = res.statusCode >= 400 || explicitFailureContext !== undefined;
+      const failureContext: UsageFailureContext | null =
+        failed
+          ? {
+              stage: explicitFailureContext?.stage || "response",
+              kind:
+                explicitFailureContext?.kind ||
+                responseErrorType ||
+                (res.statusCode === 429 ? "http_429" : "http_error"),
+              message:
+                explicitFailureContext?.message ||
+                responseErrorMessage ||
+                `HTTP ${res.statusCode}`,
+              upstreamStatus: explicitFailureContext?.upstreamStatus ?? null,
+              accountEmail: explicitFailureContext?.accountEmail ?? null,
+              accountLastError: explicitFailureContext?.accountLastError ?? null,
+              cooldownUntil: explicitFailureContext?.cooldownUntil ?? null,
+              requestSummary,
+            }
+          : null;
+
       tracker.record({
         provider,
         source,
@@ -296,12 +459,15 @@ export function wrapTrackedHandler(
         endpoint: options.endpoint,
         model: details.model,
         statusCode: res.statusCode,
-        success: res.statusCode < 400,
+        success: !failed,
         stream: !!req.body?.stream,
         latencyMs: Date.now() - startedAt,
         inputTokens: details.inputTokens,
         outputTokens: details.outputTokens,
         totalTokens: details.totalTokens,
+        cacheCreationInputTokens: details.cacheCreationInputTokens,
+        cacheReadInputTokens: details.cacheReadInputTokens,
+        failureContext,
       });
     });
 

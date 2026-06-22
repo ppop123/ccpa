@@ -9,6 +9,8 @@ import { Config } from "../src/config";
 import { canStartServer } from "../src/startup";
 import { saveToken } from "../src/auth/token-storage";
 import { TokenData } from "../src/auth/types";
+import { redactProxyUrlForLog } from "../src/logging/redact";
+import { configureOutboundProxy } from "../src/outbound-proxy";
 
 function makeConfig(authDir: string): Config {
   return {
@@ -92,6 +94,63 @@ test("allows startup when Claude is missing but Codex auth is available", () => 
     fs.rmSync(authDir, { recursive: true, force: true });
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+test("redacts proxy credentials in startup logs", () => {
+  const redacted = redactProxyUrlForLog("http://proxy-user:proxy-pass@127.0.0.1:7890");
+
+  assert.equal(redacted, "http://127.0.0.1:7890");
+  assert.doesNotMatch(redacted, /proxy-user/);
+  assert.doesNotMatch(redacted, /proxy-pass/);
+});
+
+test("startup proxy configuration falls back to LaunchAgent proxy env", (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-proxy-plist-"));
+  const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
+  fs.writeFileSync(
+    plistPath,
+    [
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+      "<plist version=\"1.0\">",
+      "<dict>",
+      "  <key>EnvironmentVariables</key>",
+      "  <dict>",
+      "    <key>HTTPS_PROXY</key>",
+      "    <string>http://proxy-user:proxy-pass@127.0.0.1:6152</string>",
+      "    <key>NO_PROXY</key>",
+      "    <string>localhost,127.0.0.1,::1,.local</string>",
+      "  </dict>",
+      "</dict>",
+      "</plist>",
+    ].join("\n")
+  );
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const logs: string[] = [];
+  let dispatcherUrl = "";
+  let dispatcherConfigured = false;
+  const proxyUrl = configureOutboundProxy({
+    env: { PATH: "/usr/bin" },
+    launchAgentPlistPaths: [plistPath],
+    createProxyAgent: (url) => {
+      dispatcherUrl = url;
+      return {} as any;
+    },
+    setDispatcher: () => {
+      dispatcherConfigured = true;
+    },
+    log: (message) => {
+      logs.push(message);
+    },
+  });
+
+  assert.equal(proxyUrl, "http://proxy-user:proxy-pass@127.0.0.1:6152");
+  assert.equal(dispatcherUrl, "http://proxy-user:proxy-pass@127.0.0.1:6152");
+  assert.equal(dispatcherConfigured, true);
+  assert.deepEqual(logs, ["Outbound HTTP proxy: http://127.0.0.1:6152"]);
 });
 
 test("rejects startup when neither Claude nor Codex auth is available", () => {

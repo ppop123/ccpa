@@ -6,8 +6,11 @@ import { runCodexLogin } from "./auth/codex-login";
 import { generatePKCECodes } from "./auth/pkce";
 import { generateAuthURL, exchangeCodeForTokens } from "./auth/oauth";
 import { waitForCallback } from "./auth/callback-server";
+import { configureOutboundProxy } from "./outbound-proxy";
 import { createServer } from "./server";
 import { canStartServer } from "./startup";
+
+configureOutboundProxy();
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });

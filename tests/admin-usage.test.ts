@@ -202,6 +202,10 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /\/admin\/accounts/);
   assert.match(pageResp.rawBody, /\/admin\/usage/);
   assert.match(pageResp.rawBody, /\/admin\/usage\/recent/);
+  assert.match(pageResp.rawBody, /Context/i);
+  assert.match(pageResp.rawBody, /Cache Hit/i);
+  assert.match(pageResp.rawBody, /refresh failures/i);
+  assert.match(pageResp.rawBody, /next refresh/i);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
   assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
 });
@@ -222,7 +226,12 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
           id: "msg_1",
           content: [{ type: "text", text: "claude ok" }],
           stop_reason: "end_turn",
-          usage: { input_tokens: 10, output_tokens: 5 },
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_creation_input_tokens: 2,
+            cache_read_input_tokens: 8,
+          },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
@@ -261,18 +270,23 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  const baseHeaders = { Authorization: "Bearer test-key" };
+  const headers = { Authorization: "Bearer test-key" };
+  const claudeHeaders = {
+    ...headers,
+    "x-forwarded-for": "10.0.0.8",
+    "x-openclaw-agent": "diting",
+    "user-agent": "OpenClaw/2026.4.2",
+  };
+  const codexHeaders = {
+    ...headers,
+    "user-agent": "curl/8.7.1",
+  };
 
   const claudeResp = await requestJson({
     server,
     method: "POST",
     path: "/v1/chat/completions",
-    headers: {
-      ...baseHeaders,
-      "User-Agent": "OpenClaw/2026.4.2",
-      "X-OpenClaw-Agent": "diting",
-      "X-Forwarded-For": "10.0.0.8",
-    },
+    headers: claudeHeaders,
     body: {
       model: "claude-sonnet-4-6",
       messages: [{ role: "user", content: "hi claude" }],
@@ -286,10 +300,7 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     server,
     method: "POST",
     path: "/v1/responses",
-    headers: {
-      ...baseHeaders,
-      "User-Agent": "curl/8.7.1",
-    },
+    headers: codexHeaders,
     body: {
       model: "gpt-5.4",
       input: [{ role: "user", content: "hi codex" }],
@@ -303,7 +314,7 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
     server,
     method: "GET",
     path: "/admin/usage",
-    headers: baseHeaders,
+    headers,
   });
 
   assert.equal(usageResp.status, 200);
@@ -316,12 +327,18 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
   assert.equal(usageResp.body.sources.curl.totalRequests, 1);
   assert.equal(usageResp.body.endpoints["POST /v1/chat/completions"].totalRequests, 1);
   assert.equal(usageResp.body.endpoints["POST /v1/responses"].totalRequests, 1);
+  assert.equal(usageResp.body.totals.cacheCreationInputTokens, 2);
+  assert.equal(usageResp.body.totals.cacheReadInputTokens, 8);
+  assert.equal(usageResp.body.totals.cacheHitRate, 8 / 27);
+  assert.equal(usageResp.body.providers.claude.cacheCreationInputTokens, 2);
+  assert.equal(usageResp.body.providers.claude.cacheReadInputTokens, 8);
+  assert.equal(usageResp.body.providers.claude.cacheHitRate, 8 / 20);
 
   const recentResp = await requestJson({
     server,
     method: "GET",
     path: "/admin/usage/recent",
-    headers: baseHeaders,
+    headers,
   });
 
   assert.equal(recentResp.status, 200);
@@ -336,6 +353,8 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
   assert.equal(recentResp.body.items[1].source, "openclaw:diting");
   assert.equal(recentResp.body.items[1].clientIp, "10.0.0.8");
   assert.equal(recentResp.body.items[1].userAgent, "OpenClaw/2026.4.2");
+  assert.equal(recentResp.body.items[1].cacheCreationInputTokens, 2);
+  assert.equal(recentResp.body.items[1].cacheReadInputTokens, 8);
 });
 
 test("admin usage tracks failed requests and recent limit", async (t) => {
@@ -427,7 +446,104 @@ test("admin usage tracks failed requests and recent limit", async (t) => {
   assert.equal(recentResp.body.items[0].success, true);
   assert.equal(recentResp.body.items[0].statusCode, 200);
   assert.equal(typeof recentResp.body.items[0].latencyMs, "number");
-  assert.equal(recentResp.body.items[0].source, "local");
-  assert.equal(recentResp.body.items[0].clientIp, "127.0.0.1");
-  assert.equal(recentResp.body.items[0].userAgent, null);
+});
+
+test("admin recent includes failure context for local routing failures", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-routing-failure-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-routing-home-"));
+  writeCodexAuth(authDir);
+
+  const config = makeConfig(authDir);
+  const manager = makeManager(authDir, [makeToken()]);
+  const server = await withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const headers = { Authorization: "Bearer test-key" };
+
+  const failedResp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers,
+    body: {
+      model: "gpt-4.1",
+      messages: [{ role: "user", content: "unsupported" }],
+      stream: false,
+      max_tokens: 256,
+    },
+  });
+
+  assert.equal(failedResp.status, 400);
+
+  const recentResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/usage/recent?limit=1",
+    headers,
+  });
+
+  assert.equal(recentResp.status, 200);
+  assert.equal(recentResp.body.items.length, 1);
+  assert.equal(recentResp.body.items[0].success, false);
+  assert.equal(recentResp.body.items[0].failureContext.stage, "routing");
+  assert.equal(recentResp.body.items[0].failureContext.kind, "unsupported_model");
+  assert.equal(recentResp.body.items[0].failureContext.message, "Unsupported model: gpt-4.1");
+  assert.equal(recentResp.body.items[0].failureContext.requestSummary.messageCount, 1);
+  assert.equal(recentResp.body.items[0].failureContext.requestSummary.stream, false);
+  assert.equal(recentResp.body.items[0].failureContext.requestSummary.maxTokens, 256);
+});
+
+test("admin recent includes failure context for cooldown failures", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-cooldown-failure-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-cooldown-home-"));
+  writeCodexAuth(authDir);
+
+  const token = makeToken();
+  const config = makeConfig(authDir);
+  const manager = makeManager(authDir, [token]);
+  manager.recordFailure(token.email, "rate_limit", "upstream 429");
+  const server = await withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const headers = { Authorization: "Bearer test-key" };
+
+  const failedResp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers,
+    body: {
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "hello" }],
+      stream: false,
+    },
+  });
+
+  assert.equal(failedResp.status, 429);
+
+  const recentResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/usage/recent?limit=1",
+    headers,
+  });
+
+  assert.equal(recentResp.status, 200);
+  assert.equal(recentResp.body.items.length, 1);
+  assert.equal(recentResp.body.items[0].success, false);
+  assert.equal(recentResp.body.items[0].failureContext.stage, "account");
+  assert.equal(recentResp.body.items[0].failureContext.kind, "cooldown");
+  assert.equal(recentResp.body.items[0].failureContext.accountEmail, token.email);
+  assert.equal(recentResp.body.items[0].failureContext.accountLastError, "rate_limit: upstream 429");
+  assert.equal(recentResp.body.items[0].failureContext.requestSummary.messageCount, 1);
 });

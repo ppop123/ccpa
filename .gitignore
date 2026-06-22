@@ -4,3 +4,6 @@ config.yaml
 *.log
 .env
 .worktrees/
+.DS_Store
+.claude/
+*.bak-pre-*

@@ -2,12 +2,7 @@ import crypto from "crypto";
 import { CloakingConfig } from "../config";
 import { shouldCloak, getCachedUserID, isValidFakeUserID } from "./cloak-utils";
 
-function randomHex(bytes: number): string {
-  return crypto.randomBytes(bytes).toString("hex").slice(0, bytes * 2);
-}
-
-function generateBillingHeader(payload: string): string {
-  const buildHash = randomHex(2).slice(0, 3);
+function generateBillingHeader(payload: string, buildHash: string): string {
   const cch = crypto.createHash("sha256").update(payload).digest("hex").slice(0, 5);
   return `x-anthropic-billing-header: cc_version=2.1.63.${buildHash}; cc_entrypoint=cli; cch=${cch};`;
 }
@@ -31,7 +26,7 @@ export function applyCloaking(
   const payload = JSON.stringify(body);
 
   // 1. Inject system prompt
-  const billingHeader = generateBillingHeader(payload);
+  const billingHeader = generateBillingHeader(payload, config["billing-build-hash"] || "000");
   const agentBlock = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
 
   const billingEntry = { type: "text", text: billingHeader };

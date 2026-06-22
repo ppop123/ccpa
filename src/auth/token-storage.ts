@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { TokenData, TokenStorage } from "./types";
+import { redactForLog } from "../logging/redact";
 
 export function tokenToStorage(data: TokenData): TokenStorage {
   return {
@@ -32,7 +33,10 @@ export function saveToken(authDir: string, data: TokenData): void {
 
 export function loadAllTokens(authDir: string): TokenData[] {
   if (!fs.existsSync(authDir)) return [];
-  const files = fs.readdirSync(authDir).filter((f) => f.startsWith("claude-") && f.endsWith(".json"));
+  const files = fs
+    .readdirSync(authDir)
+    .filter((f) => f.startsWith("claude-") && f.endsWith(".json"))
+    .sort();
   const tokens: TokenData[] = [];
   for (const file of files) {
     try {
@@ -40,7 +44,7 @@ export function loadAllTokens(authDir: string): TokenData[] {
       const storage = JSON.parse(raw) as TokenStorage;
       tokens.push(storageToToken(storage));
     } catch {
-      console.error(`Failed to load token file: ${file}`);
+      console.error(redactForLog(`Failed to load token file: ${file}`));
     }
   }
   return tokens;

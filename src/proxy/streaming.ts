@@ -1,4 +1,6 @@
 import { Response as ExpressResponse } from "express";
+import { setFailureContext } from "../monitoring/http-usage";
+import { redactForLog } from "../logging/redact";
 import { claudeStreamEventToOpenai, createStreamState } from "./translator";
 
 export interface StreamResult {
@@ -9,7 +11,8 @@ export interface StreamResult {
 export async function handleStreamingResponse(
   upstreamResp: Response,
   res: ExpressResponse,
-  model: string
+  model: string,
+  options: { includeUsage?: boolean; legacyFunctionCall?: boolean } = {}
 ): Promise<StreamResult> {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -19,17 +22,21 @@ export async function handleStreamingResponse(
 
   const reader = upstreamResp.body?.getReader();
   if (!reader) {
-    res.write("data: [DONE]\n\n");
+    setFailureContext(res, {
+      stage: "upstream",
+      kind: "network_error",
+      message: "Upstream stream ended before completion",
+    });
     res.end();
-    return { completed: true, clientDisconnected: false };
+    return { completed: false, clientDisconnected: false };
   }
 
   const decoder = new TextDecoder();
-  const state = createStreamState(model);
+  const state = createStreamState(model, options);
   let buffer = "";
-  let doneSent = false;
   let clientDisconnected = false;
   let completed = false;
+  let currentEvent = "";
 
   res.on("close", () => {
     clientDisconnected = true;
@@ -45,7 +52,6 @@ export async function handleStreamingResponse(
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
 
-      let currentEvent = "";
       for (const line of lines) {
         if (clientDisconnected) break;
         if (line.startsWith("event: ")) {
@@ -56,7 +62,9 @@ export async function handleStreamingResponse(
             const data = JSON.parse(dataStr);
             const chunks = claudeStreamEventToOpenai(currentEvent, data, state);
             for (const chunk of chunks) {
-              if (chunk === "[DONE]") doneSent = true;
+              if (chunk === "[DONE]") {
+                completed = true;
+              }
               res.write(`data: ${chunk}\n\n`);
             }
           } catch {
@@ -64,13 +72,18 @@ export async function handleStreamingResponse(
           }
         }
       }
-      completed = true;
     }
   } catch (err) {
-    if (!clientDisconnected) console.error("Stream error:", err);
+    if (!clientDisconnected) console.error("Stream error:", redactForLog(err));
   } finally {
     if (!clientDisconnected) {
-      if (!doneSent) res.write("data: [DONE]\n\n");
+      if (!completed) {
+        setFailureContext(res, {
+          stage: "upstream",
+          kind: "network_error",
+          message: "Upstream stream ended before completion",
+        });
+      }
       res.end();
     }
   }

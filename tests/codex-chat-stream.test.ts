@@ -201,3 +201,201 @@ test("Codex chat completions streams upstream SSE events as OpenAI chat chunks",
   assert.match(resp.body, /"usage":\{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20\}/);
   assert.match(resp.body, /data: \[DONE\]/);
 });
+
+test("Codex chat completions honors stream_options include_usage", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-options-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+  const calls: Array<{ body: any }> = [];
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async (_input, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ body });
+
+    return makeStreamResponse([
+      "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":1}\n\n",
+      "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":2,\"delta\":\"hello\"}\n\n",
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":3,\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":5,\"output_tokens\":7,\"total_tokens\":12}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":4}\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestRaw({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "hello" }],
+      stream: true,
+      stream_options: { include_usage: true, include_obfuscation: false },
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.deepEqual(calls[0]?.body.stream_options, { include_obfuscation: false });
+
+  const chunks = resp.body
+    .split("\n")
+    .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+    .map((line) => JSON.parse(line.slice("data: ".length)));
+  assert.ok(chunks.some((chunk) => chunk.usage === null));
+  const usageChunk = chunks.find((chunk) => Array.isArray(chunk.choices) && chunk.choices.length === 0);
+  assert.ok(usageChunk, "expected a usage-only chunk before [DONE]");
+  assert.deepEqual(usageChunk.usage, {
+    prompt_tokens: 5,
+    completion_tokens: 7,
+    total_tokens: 12,
+  });
+  assert.match(resp.body, /data: \[DONE\]/);
+});
+
+test("Codex chat completions streams custom tool calls as OpenAI chat deltas", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-custom-tool-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async () => makeStreamResponse([
+    "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":1}\n\n",
+    "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":2,\"item\":{\"type\":\"custom_tool_call\",\"call_id\":\"call_custom_1\",\"name\":\"render_markdown\",\"input\":\"**hello**\"},\"output_index\":0}\n\n",
+    "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":3,\"response\":{\"status\":\"completed\",\"model\":\"gpt-5.4\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4,\"total_tokens\":7}}}\n\n",
+    "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":4}\n\n",
+  ])) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestRaw({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "render this markdown" }],
+      tools: [{ type: "custom", custom: { name: "render_markdown", format: { type: "text" } } }],
+      stream: true,
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.match(resp.body, /"tool_calls":\[\{"index":0,"id":"call_custom_1","type":"custom","custom":\{"name":"render_markdown","input":"\*\*hello\*\*"\}\}\]/);
+  assert.match(resp.body, /"finish_reason":"tool_calls"/);
+  assert.match(resp.body, /data: \[DONE\]/);
+});
+
+test("Codex chat completions streams legacy function_call deltas for legacy functions requests", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-legacy-function-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async () => makeStreamResponse([
+    "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":1}\n\n",
+    "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":2,\"item\":{\"type\":\"function_call\",\"call_id\":\"call_weather_1\",\"name\":\"lookup_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},\"output_index\":0}\n\n",
+    "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":3,\"response\":{\"status\":\"completed\",\"model\":\"gpt-5.4\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4,\"total_tokens\":7}}}\n\n",
+    "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":4}\n\n",
+  ])) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestRaw({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "weather in Paris?" }],
+      functions: [{
+        name: "lookup_weather",
+        parameters: {
+          type: "object",
+          properties: { city: { type: "string" } },
+        },
+      }],
+      stream: true,
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.match(resp.body, /"function_call":\{"name":"lookup_weather","arguments":"\{\\\"city\\\":\\\"Paris\\\"\}"\}/);
+  assert.doesNotMatch(resp.body, /"tool_calls"/);
+  assert.match(resp.body, /"finish_reason":"function_call"/);
+  assert.match(resp.body, /data: \[DONE\]/);
+});
+
+test("Codex chat completions streams image partials as markdown content chunks", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-image-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+  const calls: Array<{ body: any }> = [];
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async (_input, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ body });
+
+    return makeStreamResponse([
+      "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":1}\n\n",
+      "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"},\"output_index\":0}\n\n",
+      "event: response.image_generation_call.partial_image\ndata: {\"type\":\"response.image_generation_call.partial_image\",\"sequence_number\":3,\"item_id\":\"ig_1\",\"output_format\":\"png\",\"partial_image_b64\":\"abc123\"}\n\n",
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":4,\"response\":{\"status\":\"completed\",\"model\":\"gpt-5.4\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4,\"total_tokens\":7}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":5}\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestRaw({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "画一只猫" }],
+      stream: true,
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.equal(calls[0]?.body.stream, true);
+  assert.deepEqual(calls[0]?.body.tools, [{ type: "image_generation" }]);
+  assert.deepEqual(calls[0]?.body.tool_choice, { type: "image_generation" });
+  assert.match(resp.body, /"content":"!\[generated image\]\(data:image\/png;base64,abc123\)"/);
+  assert.match(resp.body, /"finish_reason":"stop"/);
+  assert.match(resp.body, /data: \[DONE\]/);
+});
