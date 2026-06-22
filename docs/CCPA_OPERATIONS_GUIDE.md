@@ -331,7 +331,7 @@ LaunchAgent `~/Library/LaunchAgents/com.wangyan.ccpa.plist`（label `com.wangyan
 
 EnvironmentVariables 只有 `HOME=/Users/wangyan` 和 `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`，**没有 HTTPS_PROXY**（50.9 直连或 Surge 透明代理覆盖，不靠环境变量）。WorkingDirectory `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`，KeepAlive + RunAtLoad + `ThrottleInterval=5` + `Umask=63`（八进制 077）。实际状态以 `launchctl print gui/501/com.wangyan.ccpa` 为准。
 
-日志仍写到旧树下的 `~/ccpa/logs/launchd.{stdout,stderr}.log`（本机是 `/tmp/`），这是 plist 的 `StandardOutPath` / `StandardErrorPath`，不代表 live 代码还从旧树运行。repo 内已有 `scripts/ccpa-log-maintenance.sh`；手动 healthcheck/rollout 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 顺手维护这些日志。
+日志仍写到旧树下的 `~/ccpa/logs/launchd.{stdout,stderr}.log`（本机是 `/tmp/`），这是 plist 的 `StandardOutPath` / `StandardErrorPath`，不代表 live 代码还从旧树运行。repo 内已有 `scripts/ccpa-log-maintenance.sh`；手动 healthcheck/rollout 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 顺手维护这些日志。2026-06-22 起，`rollout:live -- --apply --install-external-healthcheck` 生成的外部 wrapper 会同时设置 `CCPA_LOG_PATHS` 默认值，覆盖 `/tmp/ccpa.*` 与 `$HOME/ccpa/logs/launchd.{stdout,stderr}.log`，避免 50.9 launchd stdout/stderr 只累积不维护。
 
 Token 文件 `~/.auth2api/claude-<account>.json`（两台机器可以登同一个 Claude 订阅；mode 0600，约 400 bytes）。Codex auth `~/.codex/auth.json` 由 50.9 本地的 codex CLI 维护。
 
@@ -1374,7 +1374,7 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 |---|---|---|
 | `/admin/accounts` provider status visibility | **closed**：响应现在包含 `server` readiness、`claude` 和 `codex`；`accounts` 数组仍只代表 Claude OAuth account pool | 若未来 Codex 支持多账号，再设计独立账号池结构 |
 | cache usage aggregation | **closed**：`UsageTracker` 已聚合 cache creation/read/hit rate，`/monitor` 与 admin usage 已展示 | 继续用 smoke/admin-usage 测试防回归 |
-| stderr log 无 rotate | **mitigated**：已有 `scripts/ccpa-log-maintenance.sh`，healthcheck 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 在 canary 前执行；本机与 50.9 外部 healthcheck wrapper 均已接仓库脚本 | 若公网化再考虑系统级 logrotate/newsyslog |
+| stderr log 无 rotate | **closed/guarded**：已有 `scripts/ccpa-log-maintenance.sh`；healthcheck 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 在 canary 前执行；2026-06-22 起 rollout 安装的外部 healthcheck wrapper 还会默认设置 `CCPA_LOG_PATHS` 覆盖本机 `/tmp/ccpa.*` 与 50.9 `$HOME/ccpa/logs/launchd.*` | 若公网化再考虑系统级 logrotate/newsyslog |
 
 ### P3 — 边缘 / 体验
 

@@ -425,7 +425,11 @@ Set `CCPA_HEALTHCHECK_RUN_CONTRACT=false` only if you need a shallow health
 watchdog during diagnostics. Set `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` if you
 want the healthcheck to run the log maintenance helper before the canary; log
 maintenance failures are recorded but do not block the canary/contract checks or
-trigger restarts.
+trigger restarts. Wrappers installed by
+`npm run rollout:live -- --apply --install-external-healthcheck` also default
+`CCPA_LOG_PATHS` to cover both `/tmp/ccpa.*` and
+`$HOME/ccpa/logs/launchd.{stdout,stderr}.log` so local and 50.9 launchd logs
+receive the same redaction/rotation maintenance.
 
 For local launchd logs, run the repository log maintenance helper periodically:
 

@@ -172,11 +172,19 @@ function findExecutableDir(command, pathValue) {
 
 function writeExternalHealthcheckWrapper(args) {
   const backupPath = `${args.externalHealthcheck}.bak-pre-repo-healthcheck-${timestamp()}`;
+  const defaultLogPaths = [
+    "/tmp/ccpa.stdout.log",
+    "/tmp/ccpa.stderr.log",
+    "/tmp/ccpa-healthcheck.log",
+    "${HOME:-}/ccpa/logs/launchd.stdout.log",
+    "${HOME:-}/ccpa/logs/launchd.stderr.log",
+  ].join(":");
   const wrapperLines = [
     "#!/usr/bin/env bash",
     "set -u",
     `cd ${JSON.stringify(args.repoDir)}`,
     'export CCPA_HEALTHCHECK_MAINTAIN_LOGS="${CCPA_HEALTHCHECK_MAINTAIN_LOGS:-true}"',
+    `export CCPA_LOG_PATHS="\${CCPA_LOG_PATHS:-${defaultLogPaths}}"`,
   ];
   const pathExport = npmBinPathExport(args.npmBin);
   if (pathExport) {

@@ -302,6 +302,10 @@ test("ccpa live rollout apply can explicitly install a repository healthcheck wr
   assert.equal(result.code, 0);
   const replacement = fs.readFileSync(externalHealthcheck, "utf8");
   assert.match(replacement, /CCPA_HEALTHCHECK_MAINTAIN_LOGS/);
+  assert.match(replacement, /CCPA_LOG_PATHS/);
+  assert.match(replacement, /\/tmp\/ccpa\.stdout\.log:\/tmp\/ccpa\.stderr\.log:\/tmp\/ccpa-healthcheck\.log/);
+  assert.match(replacement, /\$\{HOME:-\}\/ccpa\/logs\/launchd\.stdout\.log/);
+  assert.match(replacement, /\$\{HOME:-\}\/ccpa\/logs\/launchd\.stderr\.log/);
   assert.match(replacement, /run healthcheck/);
   assert.match(replacement, new RegExp(`export PATH="${escapeRegExp(path.dirname(npmBin))}:\\$\\{PATH:-\\}"`));
   assert.match(replacement, new RegExp(`exec ${escapeRegExp(JSON.stringify(npmBin))} run healthcheck -- "\\$@"`));
