@@ -9,10 +9,10 @@ export function extractApiKey(
 
   const xApiKey = headers["x-api-key"];
   if (typeof xApiKey === "string") {
-    return xApiKey;
+    return xApiKey.trim();
   }
   if (Array.isArray(xApiKey) && xApiKey.length > 0) {
-    return xApiKey[0];
+    return xApiKey[0].trim();
   }
 
   return "";
