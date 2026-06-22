@@ -1,8 +1,6 @@
-import { TimeoutConfig } from "../config";
+import { DEFAULT_ANTHROPIC_BETA, TimeoutConfig } from "../config";
 
 const BASE_URL = "https://api.anthropic.com";
-const ANTHROPIC_BETA =
-  "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05";
 
 function getStainlessArch(): string {
   const arch = process.arch;
@@ -19,12 +17,17 @@ function getStainlessOs(): string {
   return "Linux";
 }
 
-function buildHeaders(accessToken: string, stream: boolean, timeoutMs: number): Record<string, string> {
+function buildHeaders(
+  accessToken: string,
+  stream: boolean,
+  timeoutMs: number,
+  betaHeader = DEFAULT_ANTHROPIC_BETA
+): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
     "Anthropic-Version": "2023-06-01",
-    "Anthropic-Beta": ANTHROPIC_BETA,
+    "Anthropic-Beta": betaHeader,
     "Anthropic-Dangerous-Direct-Browser-Access": "true",
     "X-App": "cli",
     "User-Agent": "claude-cli/2.1.63 (external, cli)",
@@ -54,11 +57,12 @@ export async function callClaudeAPI(
   accessToken: string,
   body: any,
   stream: boolean,
-  timeouts: TimeoutConfig
+  timeouts: TimeoutConfig,
+  betaHeader?: string
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages?beta=true`;
   const timeoutMs = stream ? timeouts["stream-messages-ms"] : timeouts["messages-ms"];
-  const headers = buildHeaders(accessToken, stream, timeoutMs);
+  const headers = buildHeaders(accessToken, stream, timeoutMs, betaHeader);
 
   return fetch(url, {
     method: "POST",
@@ -71,10 +75,11 @@ export async function callClaudeAPI(
 export async function callClaudeCountTokens(
   accessToken: string,
   body: any,
-  timeouts: TimeoutConfig
+  timeouts: TimeoutConfig,
+  betaHeader?: string
 ): Promise<Response> {
   const url = `${BASE_URL}/v1/messages/count_tokens?beta=true`;
-  const headers = buildHeaders(accessToken, false, timeouts["count-tokens-ms"]);
+  const headers = buildHeaders(accessToken, false, timeouts["count-tokens-ms"], betaHeader);
 
   return fetch(url, {
     method: "POST",

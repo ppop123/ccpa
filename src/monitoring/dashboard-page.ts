@@ -403,6 +403,7 @@ export function renderMonitorPage(): string {
           <div class="metric">
             <div id="metric-total-tokens" class="metric-value">0</div>
             <div id="metric-token-breakdown" class="metric-subtle">No data yet</div>
+            <div id="metric-cache-breakdown" class="metric-subtle">Cache Hit 0%</div>
           </div>
         </article>
 
@@ -519,6 +520,11 @@ export function renderMonitorPage(): string {
           return new Intl.NumberFormat().format(number);
         }
 
+        function formatPercent(value) {
+          var number = typeof value === "number" && Number.isFinite(value) ? value : 0;
+          return (number * 100).toFixed(number > 0 && number < 1 ? 1 : 0) + "%";
+        }
+
         function formatDate(value) {
           if (!value) return "Never";
           var date = new Date(value);
@@ -607,9 +613,23 @@ export function renderMonitorPage(): string {
                 " | last failure: " + escapeHtml(formatDate(account.lastFailureAt)) +
                 " | last refresh: " + escapeHtml(formatDate(account.lastRefreshAt)) +
               "</div>" +
+              '<div class="muted tiny" style="margin-top:6px;">' +
+                "refresh failures: " + formatNumber(account.refreshFailureCount) +
+                " | next refresh: " + escapeHtml(formatDate(account.nextRefreshAttemptAt)) +
+              "</div>" +
               (account.lastError
                 ? '<div class="muted tiny" style="margin-top:6px;">last error: ' + escapeHtml(account.lastError) + "</div>"
                 : "") +
+            "</div>"
+          );
+        }
+
+        function renderCacheCell(counter) {
+          return (
+            formatPercent(counter.cacheHitRate) +
+            '<div class="muted tiny" style="margin-top:4px;">' +
+              "read " + formatNumber(counter.cacheReadInputTokens) +
+              " | create " + formatNumber(counter.cacheCreationInputTokens) +
             "</div>"
           );
         }
@@ -628,6 +648,7 @@ export function renderMonitorPage(): string {
                   "<td>" + formatNumber(entry.counter.successCount) + "</td>" +
                   "<td>" + formatNumber(entry.counter.failureCount) + "</td>" +
                   "<td>" + formatNumber(entry.counter.totalTokens) + "</td>" +
+                  "<td>" + renderCacheCell(entry.counter) + "</td>" +
                   "<td>" + escapeHtml(formatDate(entry.counter.lastRequestAt)) + "</td>" +
                 "</tr>"
               );
@@ -638,10 +659,56 @@ export function renderMonitorPage(): string {
             "<div>" +
               "<h3 style=\\"margin-bottom:12px;\\">" + escapeHtml(title) + "</h3>" +
               "<table>" +
-                "<thead><tr><th>Name</th><th>Requests</th><th>Success</th><th>Failure</th><th>Tokens</th><th>Last Seen</th></tr></thead>" +
+                "<thead><tr><th>Name</th><th>Requests</th><th>Success</th><th>Failure</th><th>Tokens</th><th>Cache Hit</th><th>Last Seen</th></tr></thead>" +
                 "<tbody>" + body + "</tbody>" +
               "</table>" +
             "</div>"
+          );
+        }
+
+        function renderFailureContext(item) {
+          if (!item || item.success || !item.failureContext) {
+            return '<span class="muted">-</span>';
+          }
+
+          var context = item.failureContext;
+          var summary = context.requestSummary || {};
+          var meta = [];
+
+          if (typeof context.upstreamStatus === "number") meta.push("upstream " + context.upstreamStatus);
+          if (context.accountEmail) meta.push("account " + context.accountEmail);
+          if (typeof summary.messageCount === "number") meta.push("messages " + summary.messageCount);
+          if (typeof summary.inputCount === "number") meta.push("input " + summary.inputCount);
+          if (typeof summary.toolCount === "number") meta.push("tools " + summary.toolCount);
+          if (typeof summary.maxTokens === "number") meta.push("max " + summary.maxTokens);
+          if (context.cooldownUntil) meta.push("cooldown until " + formatDate(context.cooldownUntil));
+
+          return (
+            '<div>' +
+              "<div><code>" + escapeHtml((context.stage || "response") + ":" + (context.kind || "http_error")) + "</code></div>" +
+              '<div class="muted tiny" style="margin-top:4px;">' + escapeHtml(context.message || "-") + "</div>" +
+              (meta.length
+                ? '<div class="muted tiny" style="margin-top:4px;">' + escapeHtml(meta.join(" | ")) + "</div>"
+                : "") +
+              (context.accountLastError
+                ? '<div class="muted tiny" style="margin-top:4px;">last error: ' + escapeHtml(context.accountLastError) + "</div>"
+                : "") +
+            "</div>"
+          );
+        }
+
+        function renderTokenCell(item) {
+          var cacheRead = item.cacheReadInputTokens || 0;
+          var cacheCreation = item.cacheCreationInputTokens || 0;
+          return (
+            formatNumber(item.totalTokens) +
+            (cacheRead || cacheCreation
+              ? '<div class="muted tiny" style="margin-top:4px;">cache read ' +
+                formatNumber(cacheRead) +
+                " | create " +
+                formatNumber(cacheCreation) +
+                "</div>"
+              : "")
           );
         }
 
@@ -652,7 +719,7 @@ export function renderMonitorPage(): string {
 
           return (
             "<table>" +
-              "<thead><tr><th>When</th><th>Provider</th><th>Endpoint</th><th>Model</th><th>Status</th><th>Latency</th><th>Tokens</th></tr></thead>" +
+              "<thead><tr><th>When</th><th>Provider</th><th>Endpoint</th><th>Model</th><th>Status</th><th>Latency</th><th>Tokens</th><th>Context</th></tr></thead>" +
               "<tbody>" +
                 items.map(function (item) {
                   return (
@@ -663,7 +730,8 @@ export function renderMonitorPage(): string {
                       "<td><code>" + escapeHtml(item.model || "-") + "</code></td>" +
                       "<td>" + escapeHtml(String(item.statusCode || "-")) + (item.success ? " ok" : " fail") + "</td>" +
                       "<td>" + formatNumber(item.latencyMs) + " ms</td>" +
-                      "<td>" + formatNumber(item.totalTokens) + "</td>" +
+                      "<td>" + renderTokenCell(item) + "</td>" +
+                      "<td>" + renderFailureContext(item) + "</td>" +
                     "</tr>"
                   );
                 }).join("") +
@@ -690,6 +758,10 @@ export function renderMonitorPage(): string {
           document.getElementById("metric-total-tokens").textContent = formatNumber(usage.totals.totalTokens);
           document.getElementById("metric-token-breakdown").textContent =
             "input " + formatNumber(usage.totals.inputTokens) + " | output " + formatNumber(usage.totals.outputTokens);
+          document.getElementById("metric-cache-breakdown").textContent =
+            "Cache Hit " + formatPercent(usage.totals.cacheHitRate) +
+            " | read " + formatNumber(usage.totals.cacheReadInputTokens) +
+            " | create " + formatNumber(usage.totals.cacheCreationInputTokens);
 
           document.getElementById("metric-recent-count").textContent = formatNumber(usage.recentCount);
           document.getElementById("metric-generated-at").textContent = "usage snapshot " + formatDate(usage.generatedAt);

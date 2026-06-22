@@ -6,6 +6,26 @@ const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const REDIRECT_URI = "http://localhost:54545/callback";
 const SCOPE = "org:create_api_key user:profile user:inference";
 
+class TokenRequestError extends Error {
+  readonly status: number;
+  readonly retryable: boolean;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "TokenRequestError";
+    this.status = status;
+    this.retryable = isRetryableTokenStatus(status);
+  }
+}
+
+function isRetryableTokenStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function shouldRetryTokenError(error: unknown): boolean {
+  return error instanceof TokenRequestError ? error.retryable : true;
+}
+
 export function generateAuthURL(state: string, pkce: PKCECodes): string {
   // Use URLSearchParams for standard params, but handle scope separately
   // because Anthropic's OAuth server expects unencoded colons in scope values
@@ -48,7 +68,7 @@ export async function exchangeCodeForTokens(
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Token exchange failed (${resp.status}): ${text}`);
+    throw new TokenRequestError(`Token exchange failed (${resp.status}): ${text}`, resp.status);
   }
 
   const data: any = await resp.json();
@@ -75,7 +95,7 @@ export async function refreshTokens(refreshToken: string): Promise<TokenData> {
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Token refresh failed (${resp.status}): ${text}`);
+    throw new TokenRequestError(`Token refresh failed (${resp.status}): ${text}`, resp.status);
   }
 
   const data: any = await resp.json();
@@ -97,7 +117,7 @@ export async function refreshTokensWithRetry(
     try {
       return await refreshTokens(refreshToken);
     } catch (err) {
-      if (attempt === maxRetries) throw err;
+      if (attempt === maxRetries || !shouldRetryTokenError(err)) throw err;
       await new Promise((r) => setTimeout(r, attempt * 1000));
     }
   }

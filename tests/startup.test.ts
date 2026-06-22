@@ -9,6 +9,7 @@ import { Config } from "../src/config";
 import { canStartServer } from "../src/startup";
 import { saveToken } from "../src/auth/token-storage";
 import { TokenData } from "../src/auth/types";
+import { redactProxyUrlForLog } from "../src/logging/redact";
 
 function makeConfig(authDir: string): Config {
   return {
@@ -92,6 +93,14 @@ test("allows startup when Claude is missing but Codex auth is available", () => 
     fs.rmSync(authDir, { recursive: true, force: true });
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+test("redacts proxy credentials in startup logs", () => {
+  const redacted = redactProxyUrlForLog("http://proxy-user:proxy-pass@127.0.0.1:7890");
+
+  assert.equal(redacted, "http://127.0.0.1:7890");
+  assert.doesNotMatch(redacted, /proxy-user/);
+  assert.doesNotMatch(redacted, /proxy-pass/);
 });
 
 test("rejects startup when neither Claude nor Codex auth is available", () => {

@@ -14,6 +14,8 @@ import { saveToken } from "../src/auth/token-storage";
 import { TokenData } from "../src/auth/types";
 import { CodexProvider } from "../src/providers/codex";
 
+const PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")).version;
+
 function makeConfig(authDir: string, codexAuthFile: string): Config {
   return {
     host: "127.0.0.1",
@@ -116,8 +118,10 @@ async function requestJson(options: {
   method: string;
   path: string;
   headers?: Record<string, string>;
+  body?: unknown;
 }): Promise<{ status: number; body: any }> {
   const address = serverAddress(options.server);
+  const body = options.body === undefined ? "" : JSON.stringify(options.body);
 
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -126,7 +130,10 @@ async function requestJson(options: {
         port: address.port,
         method: options.method,
         path: options.path,
-        headers: options.headers || {},
+        headers: {
+          ...(options.headers || {}),
+          ...(body ? { "content-type": "application/json", "content-length": Buffer.byteLength(body).toString() } : {}),
+        },
       },
       (res) => {
         let data = "";
@@ -144,7 +151,7 @@ async function requestJson(options: {
     );
 
     req.on("error", reject);
-    req.end();
+    req.end(body);
   });
 }
 
@@ -262,9 +269,135 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
   });
 
   assert.equal(adminResp.status, 200);
+  assert.equal(adminResp.body.server.service, "auth2api");
+  assert.equal(adminResp.body.server.version, PACKAGE_VERSION);
+  assert.match(adminResp.body.server.started_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(typeof adminResp.body.server.uptime_ms, "number");
+  assert.equal(adminResp.body.server.provider_status, "degraded");
+  assert.deepEqual(adminResp.body.server.providers, {
+    total: 2,
+    available: 1,
+    unavailable: ["codex"],
+  });
   assert.equal(adminResp.body.claude.name, "claude");
   assert.equal(adminResp.body.codex.name, "codex");
   assert.equal(adminResp.body.codex.available, false);
+});
+
+test("public health exposes runtime identity without provider details", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-home-"));
+  const config = makeConfig(authDir, path.join(authDir, ".codex", "auth.json"));
+  const manager = makeManager(authDir, [makeToken()]);
+  const server = withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    await stopApp(await server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const healthResp = await requestJson({
+    server: await server,
+    method: "GET",
+    path: "/health",
+  });
+
+  assert.equal(healthResp.status, 200);
+  assert.equal(healthResp.body.status, "ok");
+  assert.equal(healthResp.body.service, "auth2api");
+  assert.equal(healthResp.body.version, PACKAGE_VERSION);
+  assert.match(healthResp.body.started_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(typeof healthResp.body.uptime_ms, "number");
+  assert.equal(healthResp.body.accounts, undefined);
+  assert.equal(healthResp.body.claude, undefined);
+  assert.equal(healthResp.body.codex, undefined);
+});
+
+test("server does not expose default Claude models when claude.models is explicit empty", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-empty-claude-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-empty-claude-"));
+  const config = {
+    ...makeConfig(authDir, path.join(authDir, ".codex", "auth.json")),
+    claude: { models: [], "beta-header": "test-beta" },
+  } satisfies Config;
+  const manager = makeManager(authDir, [makeToken()]);
+  const originalFetch = global.fetch;
+  const upstreamCalls: string[] = [];
+  global.fetch = (async (input) => {
+    upstreamCalls.push(String(input));
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  const server = withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    global.fetch = originalFetch;
+    await stopApp(await server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const modelsResp = await requestJson({
+    server: await server,
+    method: "GET",
+    path: "/v1/models",
+    headers: { Authorization: "Bearer test-key" },
+  });
+
+  assert.equal(modelsResp.status, 200);
+  assert.equal(
+    modelsResp.body.data.some((model: any) => model.owned_by === "anthropic"),
+    false
+  );
+  assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.4"));
+
+  const chatResp = await requestJson({
+    server: await server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 4,
+    },
+  });
+
+  assert.equal(chatResp.status, 400);
+  assert.equal(chatResp.body.error.code, "unsupported_model");
+
+  const messagesResp = await requestJson({
+    server: await server,
+    method: "POST",
+    path: "/v1/messages",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      max_tokens: 4,
+      messages: [{ role: "user", content: "hi" }],
+    },
+  });
+
+  assert.equal(messagesResp.status, 400);
+  assert.equal(messagesResp.body.error.code, "unsupported_model");
+
+  const countResp = await requestJson({
+    server: await server,
+    method: "POST",
+    path: "/v1/messages/count_tokens",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "hi" }],
+    },
+  });
+
+  assert.equal(countResp.status, 400);
+  assert.equal(countResp.body.error.code, "unsupported_model");
+  assert.deepEqual(upstreamCalls, []);
 });
 
 test("admin status shows login hints for unavailable providers", async (t) => {

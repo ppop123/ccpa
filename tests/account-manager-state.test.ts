@@ -1,0 +1,209 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { AccountManager } from "../src/accounts/manager";
+import { loadAllTokens, saveToken } from "../src/auth/token-storage";
+import { TokenData } from "../src/auth/types";
+
+function makeToken(overrides: Partial<TokenData> = {}): TokenData {
+  return {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    email: "test@example.com",
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    ...overrides,
+  };
+}
+
+function loadManager(authDir: string): AccountManager {
+  const manager = new AccountManager(authDir);
+  manager.load();
+  return manager;
+}
+
+test("persists cooldown and counters across manager reloads", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-state-"));
+
+  try {
+    const token = makeToken();
+    saveToken(authDir, token);
+
+    const first = loadManager(authDir);
+    first.recordAttempt(token.email);
+    first.recordFailure(token.email, "rate_limit", "upstream 429");
+
+    const beforeReload = first.getSnapshots()[0];
+    assert.equal(beforeReload.totalRequests, 1);
+    assert.equal(beforeReload.totalFailures, 1);
+    assert.equal(beforeReload.failureCount, 1);
+    assert.match(beforeReload.lastError ?? "", /rate_limit: upstream 429/);
+    assert.ok(beforeReload.cooldownUntil > Date.now());
+
+    const stateRaw = fs.readFileSync(path.join(authDir, "state.json"), "utf-8");
+    assert.doesNotMatch(stateRaw, /access-token|refresh-token/);
+
+    const second = loadManager(authDir);
+    const afterReload = second.getSnapshots()[0];
+
+    assert.equal(afterReload.totalRequests, 1);
+    assert.equal(afterReload.totalFailures, 1);
+    assert.equal(afterReload.failureCount, 1);
+    assert.equal(afterReload.lastError, beforeReload.lastError);
+    assert.equal(afterReload.lastFailureAt, beforeReload.lastFailureAt);
+    assert.equal(afterReload.cooldownUntil, beforeReload.cooldownUntil);
+    assert.deepEqual(second.getAvailability(), {
+      state: "cooldown",
+      email: token.email,
+      cooldownUntil: beforeReload.cooldownUntil,
+      lastError: beforeReload.lastError,
+    });
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});
+
+test("exposes persisted refresh backoff in account snapshots", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-refresh-state-"));
+
+  try {
+    const token = makeToken();
+    const nextRefreshAttemptAt = Date.now() + 120_000;
+    saveToken(authDir, token);
+    fs.writeFileSync(
+      path.join(authDir, "state.json"),
+      JSON.stringify({
+        version: 1,
+        accounts: {
+          [token.email]: {
+            refreshFailureCount: 2,
+            nextRefreshAttemptAt,
+          },
+        },
+      })
+    );
+
+    const manager = loadManager(authDir);
+    const snapshot = manager.getSnapshots()[0];
+
+    assert.equal(snapshot.refreshFailureCount, 2);
+    assert.equal(snapshot.nextRefreshAttemptAt, nextRefreshAttemptAt);
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});
+
+test("treats expired access tokens as unavailable until refresh succeeds", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-expired-"));
+
+  try {
+    const token = makeToken({
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    saveToken(authDir, token);
+
+    const manager = loadManager(authDir);
+    const availability = manager.getAvailability();
+    const snapshot = manager.getSnapshots()[0];
+
+    assert.equal(manager.getNextAccount(), null);
+    assert.equal((availability as any).state, "expired");
+    assert.equal((availability as any).email, token.email);
+    assert.equal((availability as any).expiresAt, token.expiresAt);
+    assert.equal(snapshot.available, false);
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});
+
+test("redacts account identifiers and API keys in runtime logs", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-log-redaction-"));
+  const token = makeToken({
+    email: "private.user@example.com",
+    refreshToken: "refresh-token-for-redaction",
+  });
+  const logs: string[] = [];
+  const errors: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalFetch = globalThis.fetch;
+
+  t.after(() => {
+    console.log = originalLog;
+    console.error = originalError;
+    globalThis.fetch = originalFetch;
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map(String).join(" "));
+  };
+  globalThis.fetch = async () =>
+    new Response('{"error":"invalid_grant","hint":"private.user@example.com sk-secret1234567890"}', {
+      status: 400,
+    });
+
+  saveToken(authDir, token);
+  const manager = loadManager(authDir);
+
+  manager.recordFailure(token.email, "rate_limit", "upstream 429");
+  const refreshed = await manager.refreshAccount(token.email);
+
+  assert.equal(refreshed, false);
+  assert.equal(manager.getSnapshots()[0].email, token.email);
+  const output = [...logs, ...errors].join("\n");
+  assert.doesNotMatch(output, /private\.user@example\.com/);
+  assert.doesNotMatch(output, /sk-secret1234567890/);
+  assert.match(output, /\[email:redacted\]/);
+  assert.match(output, /\[api-key:redacted\]/);
+});
+
+test("redacts account identifiers in token file load errors", (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-token-log-redaction-"));
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  t.after(() => {
+    console.error = originalError;
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map(String).join(" "));
+  };
+  fs.writeFileSync(path.join(authDir, "claude-private.user@example.com.json"), "{not-json");
+
+  const tokens = loadAllTokens(authDir);
+
+  assert.deepEqual(tokens, []);
+  const output = errors.join("\n");
+  assert.doesNotMatch(output, /private\.user@example\.com/);
+  assert.match(output, /\[email:redacted\]/);
+});
+
+test("redacts account identifiers in single-account mismatch errors", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-mismatch-redaction-"));
+
+  try {
+    const manager = new AccountManager(authDir);
+    manager.addAccount(makeToken({ email: "first.private@example.com" }));
+
+    assert.throws(
+      () => manager.addAccount(makeToken({ email: "second.private@example.com", accessToken: "second-access" })),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.doesNotMatch(error.message, /first\.private@example\.com/);
+        assert.doesNotMatch(error.message, /second\.private@example\.com/);
+        assert.match(error.message, /\[email:redacted\]/);
+        return true;
+      }
+    );
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});

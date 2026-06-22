@@ -1,20 +1,35 @@
 import express from "express";
 import { AccountManager } from "../accounts/manager";
-import { Config } from "../config";
+import { Config, DEFAULT_CLAUDE_MODELS } from "../config";
 import { createChatCompletionsHandler } from "../proxy/handler";
 import { createMessagesHandler, createCountTokensHandler } from "../proxy/passthrough";
 import { createResponsesHandler } from "../proxy/responses";
 import { Provider, ProviderModel, ProviderStatus } from "./types";
 
-const CLAUDE_MODELS = [
-  "claude-opus-4-6",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5-20251001",
-  "claude-haiku-4-5",
-  "opus",
-  "sonnet",
-  "haiku",
-] as const;
+function normalizeConfiguredModels(models: readonly string[] | undefined): string[] {
+  const source = models === undefined ? DEFAULT_CLAUDE_MODELS : models;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const model of source) {
+    if (typeof model !== "string") continue;
+    const trimmed = model.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function hasDefaultModelSet(modelIds: Set<string>): boolean {
+  if (modelIds.size !== DEFAULT_CLAUDE_MODELS.length) {
+    return false;
+  }
+  return DEFAULT_CLAUDE_MODELS.every((model) => modelIds.has(model.toLowerCase()));
+}
 
 export class ClaudeProvider implements Provider {
   readonly name = "claude" as const;
@@ -23,11 +38,17 @@ export class ClaudeProvider implements Provider {
   private readonly responsesHandler: express.RequestHandler;
   private readonly messagesHandler: express.RequestHandler;
   private readonly countTokensHandler: express.RequestHandler;
+  private readonly modelIds: string[];
+  private readonly normalizedModelIds: Set<string>;
+  private readonly allowClaudePrefixFallback: boolean;
 
   constructor(
     private readonly config: Config,
     private readonly manager: AccountManager
   ) {
+    this.modelIds = normalizeConfiguredModels(this.config.claude?.models);
+    this.normalizedModelIds = new Set(this.modelIds.map((id) => id.toLowerCase()));
+    this.allowClaudePrefixFallback = hasDefaultModelSet(this.normalizedModelIds);
     this.chatHandler = createChatCompletionsHandler(this.config, this.manager);
     this.responsesHandler = createResponsesHandler(this.config, this.manager);
     this.messagesHandler = createMessagesHandler(this.config, this.manager);
@@ -44,11 +65,11 @@ export class ClaudeProvider implements Provider {
       return false;
     }
 
-    return normalized.startsWith("claude-") || CLAUDE_MODELS.includes(normalized as (typeof CLAUDE_MODELS)[number]);
+    return this.normalizedModelIds.has(normalized) || (this.allowClaudePrefixFallback && normalized.startsWith("claude-"));
   }
 
   listModels(): ProviderModel[] {
-    return CLAUDE_MODELS.map((id) => ({
+    return this.modelIds.map((id) => ({
       id,
       ownedBy: "anthropic",
     }));
@@ -67,11 +88,13 @@ export class ClaudeProvider implements Provider {
       };
     }
 
+    const accounts = this.manager.getSnapshots();
+
     return {
       name: this.name,
-      available: true,
+      available: accounts.some((account) => account.available),
       details: {
-        accounts: this.manager.getSnapshots(),
+        accounts,
         accountCount: this.manager.accountCount,
       },
     };

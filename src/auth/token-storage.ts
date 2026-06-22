@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { TokenData, TokenStorage } from "./types";
+import { redactForLog } from "../logging/redact";
 
 export function tokenToStorage(data: TokenData): TokenStorage {
   return {
@@ -40,7 +41,7 @@ export function loadAllTokens(authDir: string): TokenData[] {
       const storage = JSON.parse(raw) as TokenStorage;
       tokens.push(storageToToken(storage));
     } catch {
-      console.error(`Failed to load token file: ${file}`);
+      console.error(redactForLog(`Failed to load token file: ${file}`));
     }
   }
   return tokens;

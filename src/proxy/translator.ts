@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 
 // ── Model alias resolution ──
 
@@ -6,6 +6,7 @@ const MODEL_ALIASES: Record<string, string> = {
   opus:                      "claude-opus-4-6",
   sonnet:                    "claude-sonnet-4-6",
   haiku:                     "claude-haiku-4-5-20251001",
+  "claude-opus-4-8":         "claude-opus-4-8",
   "claude-opus-4-6":         "claude-opus-4-6",
   "claude-sonnet-4-6":       "claude-sonnet-4-6",
   "claude-haiku-4-5":        "claude-haiku-4-5-20251001",
@@ -18,7 +19,7 @@ export function resolveModel(model: string): string {
 // ── Reasoning effort → Claude thinking config ──
 
 const EFFORT_TO_BUDGET: Record<string, number> = {
-  none: 0, low: 1024, medium: 8192, high: 24576, xhigh: 32768,
+  none: 0, minimal: 1024, low: 1024, medium: 8192, high: 24576, xhigh: 32768,
 };
 
 function applyThinking(claudeBody: any, reasoningEffort: string): void {
@@ -84,7 +85,7 @@ function convertToolChoice(tc: any): any {
 // ── OpenAI tools → Claude tools ──
 
 function convertTools(tools: any[]): any[] {
-  return tools.map((t: any) => {
+  const converted = tools.map((t: any) => {
     if (t.type === "function" && t.function) {
       return {
         name: t.function.name,
@@ -94,20 +95,34 @@ function convertTools(tools: any[]): any[] {
     }
     return t;
   });
+  // Prompt cache breakpoint on the last tool: tool definitions are large
+  // and stable across turns — caching them slashes input tokens on multi-turn calls.
+  // Claude allows up to 4 cache_control breakpoints; placing one at the tools
+  // tail caches the entire tools array as a single prefix.
+  if (converted.length > 0) {
+    const last = converted[converted.length - 1];
+    if (last && typeof last === "object" && !last.cache_control) {
+      converted[converted.length - 1] = { ...last, cache_control: { type: "ephemeral" } };
+    }
+  }
+  return converted;
 }
 
 // ── OpenAI chat completion request → Claude messages request ──
 
 export function openaiToClaude(body: any): any {
+  const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 8192;
   const claudeBody: any = {
     model: resolveModel(body.model || "claude-sonnet-4-6"),
-    max_tokens: body.max_tokens || 8192,
+    max_tokens: maxTokens,
     stream: !!body.stream,
   };
 
   if (body.temperature !== undefined) claudeBody.temperature = body.temperature;
   if (body.top_p !== undefined) claudeBody.top_p = body.top_p;
-  if (body.stop) claudeBody.stop_sequences = Array.isArray(body.stop) ? body.stop : [body.stop];
+  if (body.stop !== undefined && body.stop !== null) {
+    claudeBody.stop_sequences = Array.isArray(body.stop) ? body.stop : [body.stop];
+  }
 
   // Thinking / reasoning
   if (body.reasoning_effort) {
@@ -118,7 +133,7 @@ export function openaiToClaude(body: any): any {
   const systemParts: any[] = [];
 
   for (const msg of body.messages || []) {
-    if (msg.role === "system") {
+    if (msg.role === "system" || msg.role === "developer") {
       const text = typeof msg.content === "string"
         ? msg.content
         : msg.content?.map((c: any) => c.text).join("\n");
@@ -178,14 +193,38 @@ export function openaiToClaude(body: any): any {
 
 // ── Claude response → OpenAI chat completion response (non-streaming) ──
 
-function mapStopReason(reason: string): string {
+interface ChatTranslationOptions {
+  legacyFunctionCall?: boolean;
+}
+
+function mapStopReason(reason: string, options: ChatTranslationOptions = {}): string {
   if (reason === "end_turn") return "stop";
   if (reason === "max_tokens") return "length";
-  if (reason === "tool_use") return "tool_calls";
+  if (reason === "tool_use") return options.legacyFunctionCall ? "function_call" : "tool_calls";
   return "stop";
 }
 
-export function claudeToOpenai(claudeResp: any, model: string): any {
+function applyLegacyFunctionCallResponse(message: any, toolCalls: any[]): boolean {
+  const functionCall = toolCalls.find((toolCall) => toolCall?.type === "function" && toolCall.function);
+  if (!functionCall) {
+    return false;
+  }
+
+  message.function_call = {
+    name: functionCall.function.name,
+    arguments:
+      typeof functionCall.function.arguments === "string"
+        ? functionCall.function.arguments
+        : JSON.stringify(functionCall.function.arguments ?? {}),
+  };
+  return true;
+}
+
+export function claudeToOpenai(
+  claudeResp: any,
+  model: string,
+  options: ChatTranslationOptions = {}
+): any {
   let textContent = "";
   const toolCalls: any[] = [];
   let reasoning = "";
@@ -210,22 +249,39 @@ export function claudeToOpenai(claudeResp: any, model: string): any {
   }
 
   const message: any = { role: "assistant", content: textContent || null };
-  if (toolCalls.length) message.tool_calls = toolCalls;
+  const legacyFunctionCall = options.legacyFunctionCall
+    ? applyLegacyFunctionCallResponse(message, toolCalls)
+    : false;
+  if (toolCalls.length && !legacyFunctionCall) message.tool_calls = toolCalls;
+
+  // Surface Claude prompt-caching counters in OpenAI-shape usage so callers can
+  // measure cache hit rate. prompt_tokens_details.cached_tokens matches OpenAI's
+  // own convention; the *_input_tokens fields preserve Claude's exact names for
+  // anyone reading the raw shim output.
+  const cacheCreation = claudeResp.usage?.cache_creation_input_tokens || 0;
+  const cacheRead = claudeResp.usage?.cache_read_input_tokens || 0;
+  const inputTokens = claudeResp.usage?.input_tokens || 0;
+  const outputTokens = claudeResp.usage?.output_tokens || 0;
 
   return {
-    id: `chatcmpl-${uuidv4()}`,
+    id: `chatcmpl-${randomUUID()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model,
     choices: [{
       index: 0,
       message,
-      finish_reason: mapStopReason(claudeResp.stop_reason),
+      finish_reason: mapStopReason(claudeResp.stop_reason, options),
     }],
     usage: {
-      prompt_tokens: claudeResp.usage?.input_tokens || 0,
-      completion_tokens: claudeResp.usage?.output_tokens || 0,
-      total_tokens: (claudeResp.usage?.input_tokens || 0) + (claudeResp.usage?.output_tokens || 0),
+      prompt_tokens: inputTokens + cacheCreation + cacheRead,
+      completion_tokens: outputTokens,
+      total_tokens: inputTokens + cacheCreation + cacheRead + outputTokens,
+      prompt_tokens_details: {
+        cached_tokens: cacheRead,
+      },
+      cache_creation_input_tokens: cacheCreation,
+      cache_read_input_tokens: cacheRead,
     },
   };
 }
@@ -237,14 +293,21 @@ export interface StreamState {
   model: string;
   toolCalls: Map<number, { id: string; name: string; args: string }>;
   nextToolIndex: number;
+  includeUsage: boolean;
+  legacyFunctionCall: boolean;
 }
 
-export function createStreamState(model: string): StreamState {
+export function createStreamState(
+  model: string,
+  options: { includeUsage?: boolean; legacyFunctionCall?: boolean } = {}
+): StreamState {
   return {
-    chatId: `chatcmpl-${uuidv4()}`,
+    chatId: `chatcmpl-${randomUUID()}`,
     model,
     toolCalls: new Map(),
     nextToolIndex: 0,
+    includeUsage: !!options.includeUsage,
+    legacyFunctionCall: !!options.legacyFunctionCall,
   };
 }
 
@@ -256,8 +319,23 @@ function makeChunk(state: StreamState, delta: any, finishReason: string | null, 
     model: state.model,
     choices: [{ index: 0, delta, finish_reason: finishReason }],
   };
-  if (usage) chunk.usage = usage;
+  if (usage && !state.includeUsage) {
+    chunk.usage = usage;
+  } else if (state.includeUsage) {
+    chunk.usage = null;
+  }
   return JSON.stringify(chunk);
+}
+
+function makeUsageChunk(state: StreamState, usage: any): string {
+  return JSON.stringify({
+    id: state.chatId,
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: state.model,
+    choices: [],
+    usage,
+  });
 }
 
 // ── Claude SSE event → OpenAI SSE chunk(s) ──
@@ -279,14 +357,20 @@ export function claudeStreamEventToOpenai(
     if (block?.type === "tool_use") {
       const idx = state.nextToolIndex++;
       state.toolCalls.set(data.index, { id: block.id, name: block.name, args: "" });
-      chunks.push(makeChunk(state, {
-        tool_calls: [{
-          index: idx,
-          id: block.id,
-          type: "function",
-          function: { name: block.name, arguments: "" },
-        }],
-      }, null));
+      if (state.legacyFunctionCall) {
+        chunks.push(makeChunk(state, {
+          function_call: { name: block.name, arguments: "" },
+        }, null));
+      } else {
+        chunks.push(makeChunk(state, {
+          tool_calls: [{
+            index: idx,
+            id: block.id,
+            type: "function",
+            function: { name: block.name, arguments: "" },
+          }],
+        }, null));
+      }
     }
     // thinking / redacted_thinking block start — no output needed
     return chunks;
@@ -306,18 +390,24 @@ export function claudeStreamEventToOpenai(
       const tc = state.toolCalls.get(data.index);
       if (tc) {
         tc.args += data.delta.partial_json;
-        // Find the OpenAI tool index
-        let tcIdx = 0;
-        for (const [blockIdx] of state.toolCalls) {
-          if (blockIdx === data.index) break;
-          tcIdx++;
+        if (state.legacyFunctionCall) {
+          chunks.push(makeChunk(state, {
+            function_call: { arguments: data.delta.partial_json },
+          }, null));
+        } else {
+          // Find the OpenAI tool index
+          let tcIdx = 0;
+          for (const [blockIdx] of state.toolCalls) {
+            if (blockIdx === data.index) break;
+            tcIdx++;
+          }
+          chunks.push(makeChunk(state, {
+            tool_calls: [{
+              index: tcIdx,
+              function: { arguments: data.delta.partial_json },
+            }],
+          }, null));
         }
-        chunks.push(makeChunk(state, {
-          tool_calls: [{
-            index: tcIdx,
-            function: { arguments: data.delta.partial_json },
-          }],
-        }, null));
       }
     }
     return chunks;
@@ -329,13 +419,28 @@ export function claudeStreamEventToOpenai(
   }
 
   if (event === "message_delta") {
-    const finishReason = mapStopReason(data.delta?.stop_reason || "end_turn");
-    const usage = data.usage ? {
-      prompt_tokens: data.usage.input_tokens || 0,
-      completion_tokens: data.usage.output_tokens || 0,
-      total_tokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
-    } : undefined;
-    chunks.push(makeChunk(state, {}, finishReason, usage));
+    const finishReason = mapStopReason(data.delta?.stop_reason || "end_turn", {
+      legacyFunctionCall: state.legacyFunctionCall,
+    });
+    let usage: any | undefined;
+    if (data.usage) {
+      const cacheCreation = data.usage.cache_creation_input_tokens || 0;
+      const cacheRead = data.usage.cache_read_input_tokens || 0;
+      const inputTokens = data.usage.input_tokens || 0;
+      const outputTokens = data.usage.output_tokens || 0;
+      usage = {
+        prompt_tokens: inputTokens + cacheCreation + cacheRead,
+        completion_tokens: outputTokens,
+        total_tokens: inputTokens + cacheCreation + cacheRead + outputTokens,
+        prompt_tokens_details: { cached_tokens: cacheRead },
+        cache_creation_input_tokens: cacheCreation,
+        cache_read_input_tokens: cacheRead,
+      };
+    }
+    chunks.push(makeChunk(state, {}, finishReason, state.includeUsage ? undefined : usage));
+    if (state.includeUsage && usage) {
+      chunks.push(makeUsageChunk(state, usage));
+    }
     return chunks;
   }
 

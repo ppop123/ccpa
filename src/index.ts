@@ -1,13 +1,21 @@
 import crypto from "crypto";
 import readline from "readline";
+import { ProxyAgent, setGlobalDispatcher } from "undici";
 import { loadConfig, resolveAuthDir } from "./config";
 import { AccountManager } from "./accounts/manager";
 import { runCodexLogin } from "./auth/codex-login";
 import { generatePKCECodes } from "./auth/pkce";
 import { generateAuthURL, exchangeCodeForTokens } from "./auth/oauth";
 import { waitForCallback } from "./auth/callback-server";
+import { redactProxyUrlForLog } from "./logging/redact";
 import { createServer } from "./server";
 import { canStartServer } from "./startup";
+
+const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+if (proxyUrl) {
+  setGlobalDispatcher(new ProxyAgent(proxyUrl));
+  console.log(`Outbound HTTP proxy: ${redactProxyUrlForLog(proxyUrl)}`);
+}
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -61,4 +63,96 @@ test("runCodexLogin returns the auth file path after successful codex login", as
   });
 
   assert.equal(resolvedPath, authFilePath);
+});
+
+test("runCodexLogin fills proxy env from LaunchAgent plist when shell env is missing", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-login-plist-"));
+  const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
+  const authFilePath = path.join(tmpDir, "auth.json");
+  fs.writeFileSync(authFilePath, "{}");
+  fs.writeFileSync(
+    plistPath,
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+      '<plist version="1.0">',
+      "<dict>",
+      "  <key>EnvironmentVariables</key>",
+      "  <dict>",
+      "    <key>HTTPS_PROXY</key>",
+      "    <string>http://127.0.0.1:6152</string>",
+      "    <key>NO_PROXY</key>",
+      "    <string>localhost,127.0.0.1,::1,.local</string>",
+      "  </dict>",
+      "</dict>",
+      "</plist>",
+    ].join("\n")
+  );
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  await runCodexLogin({
+    authFilePath,
+    env: { PATH: "/usr/bin" },
+    launchAgentPlistPaths: [plistPath],
+    existsSync: (candidatePath) => candidatePath === authFilePath,
+    spawn: (_command, _args, options) => {
+      assert.equal((options as any).env.HTTPS_PROXY, "http://127.0.0.1:6152");
+      assert.equal((options as any).env.NO_PROXY, "localhost,127.0.0.1,::1,.local");
+      assert.equal((options as any).env.PATH, "/usr/bin");
+
+      const child = new MockChildProcess();
+      process.nextTick(() => {
+        child.emit("exit", 0);
+      });
+      return child as any;
+    },
+  } as any);
+});
+
+test("runCodexLogin keeps explicit shell proxy env over LaunchAgent plist", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-login-env-precedence-"));
+  const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
+  const authFilePath = path.join(tmpDir, "auth.json");
+  fs.writeFileSync(authFilePath, "{}");
+  fs.writeFileSync(
+    plistPath,
+    [
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+      "<plist version=\"1.0\">",
+      "<dict>",
+      "  <key>EnvironmentVariables</key>",
+      "  <dict>",
+      "    <key>HTTPS_PROXY</key>",
+      "    <string>http://127.0.0.1:6152</string>",
+      "  </dict>",
+      "</dict>",
+      "</plist>",
+    ].join("\n")
+  );
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  await runCodexLogin({
+    authFilePath,
+    env: {
+      PATH: "/usr/bin",
+      HTTPS_PROXY: "http://127.0.0.1:9999",
+    },
+    launchAgentPlistPaths: [plistPath],
+    existsSync: (candidatePath) => candidatePath === authFilePath,
+    spawn: (_command, _args, options) => {
+      assert.equal((options as any).env.HTTPS_PROXY, "http://127.0.0.1:9999");
+
+      const child = new MockChildProcess();
+      process.nextTick(() => {
+        child.emit("exit", 0);
+      });
+      return child as any;
+    },
+  } as any);
 });

@@ -21,6 +21,71 @@ test("loadConfig provides default codex config", () => {
   assert.equal(config.codex.enabled, true);
   assert.equal(config.codex["auth-file"], "~/.codex/auth.json");
   assert.deepEqual(config.codex.models, []);
+  assert.equal(config.codex.store, false);
+  assert.deepEqual(config.claude.models, [
+    "claude-opus-4-8",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-haiku-4-5",
+    "opus",
+    "sonnet",
+    "haiku",
+  ]);
+  assert.equal(
+    (config.claude as any)["beta-header"],
+    "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05"
+  );
+});
+
+test("loadConfig reads configured Claude models and beta header", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-config-"));
+  const configPath = path.join(tmpDir, "config.yaml");
+  fs.writeFileSync(
+    configPath,
+    [
+      "api-keys:",
+      "  - test-key",
+      "claude:",
+      "  beta-header: custom-beta-20260617",
+      "  models:",
+      "    - claude-custom-20260616",
+      "    - my-sonnet-alias",
+    ].join("\n")
+  );
+
+  try {
+    const config = loadConfig(configPath);
+    assert.deepEqual(config.claude.models, ["claude-custom-20260616", "my-sonnet-alias"]);
+    assert.equal((config.claude as any)["beta-header"], "custom-beta-20260617");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig reads configured Codex store default", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-store-config-"));
+  const configPath = path.join(tmpDir, "config.yaml");
+  fs.writeFileSync(
+    configPath,
+    [
+      "api-keys:",
+      "  - test-key",
+      "codex:",
+      "  enabled: true",
+      "  auth-file: ~/.codex/auth.json",
+      "  store: true",
+      "  models:",
+      "    - gpt-5.4",
+    ].join("\n")
+  );
+
+  try {
+    const config = loadConfig(configPath);
+    assert.equal(config.codex.store, true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test("CodexAuthStore reads token data from auth.json", () => {

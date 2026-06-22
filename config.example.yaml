@@ -11,12 +11,20 @@ api-keys:
 # Maximum JSON request body size
 body-limit: "200mb"
 
+# Optional local per-IP rate limiting for /v1 routes
+# Disabled by default to avoid throttling single-user local workflows.
+rate-limit:
+  enabled: false
+  window-ms: 60000
+  max-requests: 60
+
 # Cloaking settings (masquerade as Claude Code CLI)
 cloaking:
   mode: "auto"          # auto | always | never
   strict-mode: false    # true = only billing header + agent block in system prompt
   sensitive-words: []   # words to obfuscate with zero-width spaces
   cache-user-id: false  # cache fake user ID per API key
+  billing-build-hash: "000"  # stable 3-hex cc_version suffix for billing header cloaking
 
 # Upstream request timeouts
 timeouts:
@@ -24,13 +32,32 @@ timeouts:
   stream-messages-ms: 600000  # stream /v1/messages timeout, suitable for Claude Code long tasks
   count-tokens-ms: 30000      # /v1/messages/count_tokens timeout
 
+# Claude provider model IDs exposed by /v1/models and custom aliases routed to Claude.
+# Keep these in config so new aliases and beta header changes do not require a code change.
+claude:
+  # Sent as Anthropic-Beta on Claude upstream requests.
+  # Defaults to the Claude Code-compatible beta set used by this proxy.
+  beta-header: "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05"
+  models:
+    - "claude-opus-4-8"
+    - "claude-opus-4-6"
+    - "claude-sonnet-4-6"
+    - "claude-haiku-4-5-20251001"
+    - "claude-haiku-4-5"
+    - "opus"
+    - "sonnet"
+    - "haiku"
+
 # Codex provider settings
 # Use `node dist/index.js --login-codex` or `npm run login:codex` to create the local Codex login state if needed.
 codex:
   enabled: true
   auth-file: "~/.codex/auth.json"
+  # Default request persistence for Codex upstream calls. Client `store` overrides this.
+  store: false
   models:
     - "gpt-5.4"
+    - "gpt-image-2"
 
 # Debug logging level:
 # off = no extra logs

@@ -7,21 +7,35 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
     "login": "tsx src/index.ts --login",
     "login:codex": "tsx src/index.ts --login-codex",
-    "test:smoke": "tsx --test tests/smoke.test.ts"
+    "canary": "node scripts/ccpa-canary.mjs",
+    "contract:check": "node scripts/ccpa-contract-check.mjs",
+    "healthcheck": "bash scripts/ccpa-healthcheck.sh",
+    "logs:maintain": "bash scripts/ccpa-log-maintenance.sh",
+    "release:readiness": "node scripts/ccpa-release-readiness.mjs",
+    "release:verify": "node scripts/ccpa-release-verify.mjs",
+    "rollout:live": "node scripts/ccpa-live-rollout.mjs",
+    "rollout:preflight": "node scripts/ccpa-rollout-preflight.mjs",
+    "secrets:scan": "node scripts/ccpa-secret-scan.mjs",
+    "security:posture": "node scripts/ccpa-security-posture.mjs",
+    "security:audit": "npm audit --audit-level=moderate",
+    "test:ops": "tsx --test tests/canary-script.test.ts tests/contract-check-script.test.ts tests/healthcheck-script.test.ts tests/live-rollout-script.test.ts tests/log-maintenance-script.test.ts tests/release-readiness-script.test.ts tests/release-verify-script.test.ts tests/rollout-preflight-script.test.ts tests/secret-scan-script.test.ts tests/security-posture-script.test.ts tests/upstream-matrix-script.test.ts",
+    "test:smoke": "tsx --test tests/smoke.test.ts",
+    "test:unit": "tsx --test tests/account-manager-state.test.ts tests/admin-usage.test.ts tests/claude-provider.test.ts tests/claude-translator.test.ts tests/cloaking.test.ts tests/codex-auth.test.ts tests/codex-chat-stream.test.ts tests/codex-chat.test.ts tests/codex-images.test.ts tests/codex-login.test.ts tests/codex-provider-status.test.ts tests/codex-responses-stream.test.ts tests/codex-responses.test.ts tests/codex-sse.test.ts tests/config.test.ts tests/dependency-hygiene.test.ts tests/oauth.test.ts tests/provider-router.test.ts tests/startup.test.ts",
+    "upstream:matrix": "node scripts/ccpa-upstream-matrix.mjs"
   },
   "dependencies": {
     "express": "^4.21.0",
     "js-yaml": "^4.1.0",
-    "uuid": "^10.0.0"
+    "undici": "^7.25.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.0",
-    "@types/uuid": "^10.0.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.0"
   }
 }

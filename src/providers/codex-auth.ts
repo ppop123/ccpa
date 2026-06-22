@@ -94,4 +94,31 @@ export class CodexAuthStore {
 
     throw new CodexAuthError(`Codex auth file not found: ${this.authFilePaths.join(", ")}`);
   }
+
+  invalidate(): void {
+    this.cachedAuthFilePath = null;
+    this.cachedMtimeMs = null;
+    this.cachedSnapshot = null;
+  }
+
+  reloadAfterAuthFailure(previous: CodexAuthSnapshot): CodexAuthSnapshot | null {
+    this.invalidate();
+
+    let next: CodexAuthSnapshot;
+    try {
+      next = this.load();
+    } catch {
+      return null;
+    }
+
+    if (
+      next.path !== previous.path ||
+      next.mtimeMs !== previous.mtimeMs ||
+      next.accessToken !== previous.accessToken
+    ) {
+      return next;
+    }
+
+    return null;
+  }
 }

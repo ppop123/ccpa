@@ -1,9 +1,9 @@
 import crypto from "crypto";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 
 export function generateFakeUserID(): string {
   const hex64 = crypto.randomBytes(32).toString("hex");
-  return `user_${hex64}_account_${uuidv4()}_session_${uuidv4()}`;
+  return `user_${hex64}_account_${randomUUID()}_session_${randomUUID()}`;
 }
 
 const USER_ID_RE = /^user_[a-fA-F0-9]{64}_account_[0-9a-f-]{36}_session_[0-9a-f-]{36}$/;
