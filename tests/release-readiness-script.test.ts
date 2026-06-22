@@ -96,6 +96,34 @@ test("release readiness passes with dirty candidate changes when no transient ar
   assert.match(result.stdout, /release_ready: yes/);
 });
 
+test("release readiness warns about ignored transient artifacts without failing release", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-ignored-transient-"));
+  const statusFile = writeStatus(
+    tmpDir,
+    [
+      " M src/server.ts",
+      "!! .DS_Store",
+      "!! .claude/worktrees/vigilant-fermi-838b54/",
+      "!! src/.DS_Store",
+      "!! src/providers/codex-chat.ts.bak-pre-merge-2026-06-09",
+      "!! dist/.DS_Store",
+      "",
+    ].join("\n")
+  );
+
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const result = await runReadiness(["--status-file", statusFile]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /transient artifacts: 0 visible/);
+  assert.match(result.stdout, /ignored transient artifacts: 4 hidden/);
+  assert.match(result.stdout, /\.claude\/worktrees\/vigilant-fermi-838b54\//);
+  assert.match(result.stdout, /src\/providers\/codex-chat\.ts\.bak-pre-merge-2026-06-09/);
+  assert.doesNotMatch(result.stdout, /dist\/\.DS_Store/);
+  assert.match(result.stdout, /release_ready: yes/);
+});
+
 test("release readiness emits a JSON candidate manifest grouped by review bucket", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-json-"));
   const statusFile = writeStatus(
@@ -144,6 +172,7 @@ test("release readiness emits a JSON candidate manifest grouped by review bucket
     modified: 5,
     untrackedCandidates: 4,
     transientArtifacts: 0,
+    ignoredTransientArtifacts: 0,
     candidateFiles: 9,
   });
   assert.deepEqual(manifest.buckets["runtime-source"].paths, ["src/server.ts", "src/errors/openai.ts"]);
@@ -205,6 +234,7 @@ test("release readiness can write a handoff JSON manifest to an explicit path", 
     modified: 1,
     untrackedCandidates: 1,
     transientArtifacts: 0,
+    ignoredTransientArtifacts: 0,
     candidateFiles: 2,
   });
   assert.deepEqual(manifest.buckets["runtime-source"].paths, ["src/server.ts"]);

@@ -17,6 +17,7 @@ Checks:
   - groups candidate files by review bucket for release handoff
   - rejects visible transient artifacts such as .DS_Store, .claude worktrees,
     and *.bak-* backup files
+  - warns on ignored transient artifacts in release-facing paths without failing
 
 Options:
   --repo-dir DIR       Repository directory, default cwd
@@ -61,15 +62,55 @@ function parseArgs(argv) {
   return args;
 }
 
-function runGitStatus(repoDir) {
+const IGNORED_TRANSIENT_SCAN_PATHS = [
+  ".DS_Store",
+  ".claude",
+  "src",
+  "scripts",
+  "docs",
+  "README.md",
+  "README_CN.md",
+  "config.example.yaml",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  ".gitignore",
+];
+
+function runGitStatusCommand(repoDir, args) {
   return new Promise((resolve, reject) => {
-    execFile("git", ["status", "--short", "--untracked-files=all"], { cwd: repoDir }, (error, stdout, stderr) => {
+    execFile("git", args, { cwd: repoDir }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr.trim() || error.message));
         return;
       }
       resolve(stdout);
     });
+  });
+}
+
+function runGitStatus(repoDir) {
+  return Promise.all([
+    runGitStatusCommand(repoDir, ["status", "--short", "--untracked-files=all"]),
+    runGitStatusCommand(repoDir, [
+      "status",
+      "--ignored",
+      "--short",
+      "--untracked-files=all",
+      "--",
+      ...IGNORED_TRANSIENT_SCAN_PATHS,
+    ]),
+  ]).then(([statusText, ignoredStatusText]) => {
+    const ignoredTransientStatus = ignoredStatusText
+      .split(/\r?\n/)
+      .filter((line) => {
+        const entry = parseStatusLine(line);
+        return entry?.status === "!!" && isIgnoredTransientArtifact(entry.filePath);
+      })
+      .join("\n");
+    return [statusText.trimEnd(), ignoredTransientStatus]
+      .filter(Boolean)
+      .join("\n");
   });
 }
 
@@ -95,6 +136,20 @@ function isTransientArtifact(filePath) {
     normalized.endsWith("/.DS_Store") ||
     normalized.startsWith(".claude/") ||
     /(^|\/)[^/]+\.bak-[^/]+$/.test(normalized)
+  );
+}
+
+function isIgnoredTransientArtifact(filePath) {
+  const normalized = filePath.split(path.sep).join("/");
+  if (!isTransientArtifact(normalized)) {
+    return false;
+  }
+  return (
+    normalized === ".DS_Store" ||
+    normalized.startsWith(".claude/") ||
+    normalized.startsWith("src/") ||
+    normalized.startsWith("scripts/") ||
+    normalized.startsWith("docs/")
   );
 }
 
@@ -168,13 +223,17 @@ function classify(statusText) {
     .split(/\r?\n/)
     .map(parseStatusLine)
     .filter(Boolean);
-  const modified = entries.filter((entry) => entry.status !== "??");
-  const untracked = entries.filter((entry) => entry.status === "??");
-  const transient = entries.filter((entry) => isTransientArtifact(entry.filePath));
-  const candidateEntries = entries.filter((entry) => !isTransientArtifact(entry.filePath));
+  const visibleEntries = entries.filter((entry) => entry.status !== "!!");
+  const ignoredTransient = entries.filter(
+    (entry) => entry.status === "!!" && isIgnoredTransientArtifact(entry.filePath)
+  );
+  const modified = visibleEntries.filter((entry) => entry.status !== "??");
+  const untracked = visibleEntries.filter((entry) => entry.status === "??");
+  const transient = visibleEntries.filter((entry) => isTransientArtifact(entry.filePath));
+  const candidateEntries = visibleEntries.filter((entry) => !isTransientArtifact(entry.filePath));
   const untrackedCandidates = untracked.filter((entry) => !isTransientArtifact(entry.filePath));
   const buckets = summarizeBuckets(candidateEntries);
-  return { entries, modified, untracked, untrackedCandidates, transient, candidateEntries, buckets };
+  return { entries, modified, untracked, untrackedCandidates, transient, ignoredTransient, candidateEntries, buckets };
 }
 
 function toManifest(summary, args) {
@@ -207,10 +266,12 @@ function toManifest(summary, args) {
       modified: summary.modified.length,
       untrackedCandidates: summary.untrackedCandidates.length,
       transientArtifacts: summary.transient.length,
+      ignoredTransientArtifacts: summary.ignoredTransient.length,
       candidateFiles: summary.candidateEntries.length,
     },
     buckets: summary.buckets,
     transientArtifacts: summary.transient.map((entry) => entry.filePath),
+    ignoredTransientArtifacts: summary.ignoredTransient.map((entry) => entry.filePath),
   };
 }
 
@@ -232,11 +293,19 @@ function printSummary(summary, options = {}) {
   console.log(`modified: ${summary.modified.length}`);
   console.log(`untracked candidates: ${summary.untrackedCandidates.length}`);
   console.log(`transient artifacts: ${summary.transient.length} visible`);
+  console.log(`ignored transient artifacts: ${summary.ignoredTransient.length} hidden`);
   printBucketSummary(summary, options.list);
 
   if (summary.transient.length > 0) {
     console.log("transient artifact paths:");
     for (const entry of summary.transient) {
+      console.log(`  - ${entry.filePath}`);
+    }
+  }
+
+  if (summary.ignoredTransient.length > 0) {
+    console.log("ignored transient artifact paths:");
+    for (const entry of summary.ignoredTransient) {
       console.log(`  - ${entry.filePath}`);
     }
   }
