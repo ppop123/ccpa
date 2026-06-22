@@ -26,6 +26,14 @@ function safeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+function rateLimitBucketKey(req: express.Request): string {
+  const apiKey = extractApiKey(req.headers);
+  if (apiKey) {
+    return `api-key:${crypto.createHash("sha256").update(apiKey).digest("hex")}`;
+  }
+  return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
+}
+
 function createRateLimitMiddleware(config: Config["rate-limit"]): express.RequestHandler | null {
   if (!config?.enabled) {
     return null;
@@ -44,12 +52,12 @@ function createRateLimitMiddleware(config: Config["rate-limit"]): express.Reques
   cleanupTimer.unref();
 
   return (req, res, next) => {
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const bucketKey = rateLimitBucketKey(req);
     const now = Date.now();
-    const entry = buckets.get(ip);
+    const entry = buckets.get(bucketKey);
 
     if (!entry || now > entry.resetAt) {
-      buckets.set(ip, { count: 1, resetAt: now + windowMs });
+      buckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
       next();
       return;
     }

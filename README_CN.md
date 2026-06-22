@@ -93,7 +93,7 @@ debug: "off"
 
 完整配置可以直接看 [config.example.yaml](/Users/wy/auth2api/config.example.yaml)。
 
-本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](/Users/wy/auth2api/config.example.yaml) 里调整。
+本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](/Users/wy/auth2api/config.example.yaml) 里调整。启用后按已鉴权 API key 隔离 bucket，同一个 IP 下某个客户端 key 超限不会连带消耗另一个 key 的额度。
 
 启动：
 

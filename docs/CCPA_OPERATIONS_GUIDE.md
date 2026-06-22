@@ -18,7 +18,7 @@
 - prompt cache usage 已进入 `/admin/usage`、`/admin/usage/recent` 和 `/monitor` 聚合展示。
 - `/tmp/ccpa.stdout.log`、`/tmp/ccpa.stderr.log`、`/tmp/ccpa-healthcheck.log` 已有 repo 管理的维护脚本和 healthcheck opt-in；本机 `/Users/wy/ccpa-healthcheck.sh` 与 50.9 `/Users/wangyan/ccpa-healthcheck.sh` 都已替换为仓库 wrapper。
 - cloaking billing build hash 已稳定为配置项/默认值，不再每次请求随机；`cch` 仍随 payload 变化。
-- rate-limit 默认关闭是自用内网部署的有意默认。若暴露到公网或多客户端环境，应在 `config.yaml` 显式开启。
+- rate-limit 默认关闭是自用内网部署的有意默认。若暴露到公网或多客户端环境，应在 `config.yaml` 显式开启；启用后 `/v1` bucket 按已鉴权 API key 的 hash 隔离，而不是按来源 IP 把多个 key 混在一起。
 - 50.9 live 在 2026-06-22 已重新完成 CCPA Claude OAuth 登录并切到 clean candidate，当前 strict canary provider readiness 为 `ok`：Claude 与 Codex 两个 provider 都可用；`/v1/models` 当前 13 个模型，外部 healthcheck wrapper 已指向 candidate path 并可在非登录 PATH 下直接运行。
 - canary/preflight/strict release gate 现在会在 provider degraded 时打印 `provider_hint`，例如 Claude 过期会直接提示 `node dist/index.js --config=... --login --manual`，而不是只给 generic degraded 错误。
 - canary 支持 `--require-build-commit <sha>`，可用 `/health.build.git_commit` 证明 live runtime 是否真的跑某个候选提交，避免只靠 dist mtime 判断。
@@ -1364,7 +1364,7 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 
 #### 6. rate-limit 默认 disabled — intentional default
 - **2026-06-19 状态**：默认关闭仍保留，原因是当前部署定位为内网自用 + API key 限制，避免给个人自动化管线增加默认误伤。
-- **安全边界**：如果暴露到公网、多人共享或无法信任客户端，应在 `config.yaml` 显式开启 `rate-limit.enabled=true`，并设置每 key 的窗口/请求上限。
+- **安全边界**：如果暴露到公网、多人共享或无法信任客户端，应在 `config.yaml` 显式开启 `rate-limit.enabled=true`，并设置每 key 的窗口/请求上限。Phase 192 起本地 `/v1` 限流按已鉴权 API key hash 分桶，避免同 IP 下某个 key 超限连带阻断其他 key。
 
 #### 7. cloaking billingHeader build hash stability — closed
 - **2026-06-19 状态**：billing build hash 已变成稳定配置/默认值，避免每次请求生成新的 `cc_version` suffix。payload 相关的 `cch` 仍然按请求内容变化。

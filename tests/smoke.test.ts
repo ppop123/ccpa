@@ -10341,6 +10341,53 @@ test("local /v1 rate limit can be explicitly enabled", async (t) => {
   assert.equal(limited.body.error.code, "rate_limit_exceeded");
 });
 
+test("local /v1 rate limit isolates buckets by authenticated API key", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-rate-limit-per-key-"));
+  writeCodexAuth(authDir);
+  const manager = makeManager(authDir, []);
+  const config = makeConfigWithRateLimit(authDir, {
+    enabled: true,
+    "window-ms": 60_000,
+    "max-requests": 2,
+  });
+  const server = await startApp({ ...config, "api-keys": ["test-key", "other-key"] }, manager);
+
+  t.after(async () => {
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const firstKeyHeaders = { Authorization: "Bearer test-key" };
+  const secondKeyHeaders = { Authorization: "Bearer other-key" };
+
+  for (let i = 0; i < 2; i++) {
+    const allowed = await requestJson({
+      server,
+      method: "GET",
+      path: "/v1/models",
+      headers: firstKeyHeaders,
+    });
+    assert.equal(allowed.status, 200);
+  }
+
+  const firstKeyLimited = await requestJson({
+    server,
+    method: "GET",
+    path: "/v1/models",
+    headers: firstKeyHeaders,
+  });
+  assert.equal(firstKeyLimited.status, 429);
+  assert.equal(firstKeyLimited.body.error.code, "rate_limit_exceeded");
+
+  const secondKeyAllowed = await requestJson({
+    server,
+    method: "GET",
+    path: "/v1/models",
+    headers: secondKeyHeaders,
+  });
+  assert.equal(secondKeyAllowed.status, 200);
+});
+
 test("missing Codex auth only breaks Codex models and still allows Claude models", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-home-"));

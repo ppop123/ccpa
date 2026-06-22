@@ -11,7 +11,7 @@ api-keys:
 # Maximum JSON request body size
 body-limit: "200mb"
 
-# Optional local per-IP rate limiting for /v1 routes
+# Optional local per-API-key rate limiting for /v1 routes.
 # Disabled by default to avoid throttling single-user local workflows.
 rate-limit:
   enabled: false
