@@ -175,7 +175,7 @@ Response
 res.json(openaiResp)   ←  请求结束
 ```
 
-codex 路径同构但更简单：`CodexProvider.handleChatCompletions` → `providers/codex-chat.ts` 做 chat→Responses 转换 → `providers/codex-upstream.ts:13 callCodexResponses` → `chatgpt.com/backend-api/codex/responses`。codex 不走 cloaking（没账户切换、没 OAuth refresh），上游 401 直接抛出依赖 codex CLI 续期（已知 P3 issue）。
+codex 路径同构但更简单：`CodexProvider.handleChatCompletions` → `providers/codex-chat.ts` 做 chat→Responses 转换 → `providers/codex-upstream.ts:13 callCodexResponses` → `chatgpt.com/backend-api/codex/responses`。codex 不走 cloaking，也没有 CCPA 自己的 OAuth refresh；上游 401 时会丢弃内存 auth snapshot、重读 `~/.codex/auth.json` 并重试一次。如果 codex CLI 没有把 auth 文件刷新好，重试仍会失败，需要重新 `codex login`。
 
 `/v1/messages`、`/v1/messages/count_tokens` 是 Anthropic native 直 passthrough，不经 translator，由 `proxy/passthrough.ts` 处理。
 
@@ -318,19 +318,19 @@ curl -sS http://127.0.0.1:8317/health
 
 ### 50.9（wangyan@192.168.50.9，Mac mini）
 
-项目目录 `/Users/wangyan/ccpa/`（注意是 `ccpa/` 不是 `auth2api/`），git remote 单一 `origin https://github.com/ppop123/ccpa`，当前 HEAD `b177ccf chore: prepare v1.1.1 release`。dist 已构建（`~/ccpa/dist/index.js` mtime `Jun 9 14:58` 跟本机同步过）。
+live 项目目录已切到 `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`，旧 `/Users/wangyan/ccpa/` 只作为历史回滚材料和日志目录保留。candidate git remote 单一 `origin https://github.com/ppop123/ccpa`；当前运行 commit 不靠手写版本号判断，统一用 `npm run canary -- --require-build-commit "$(git rev-parse HEAD)"` 验证。
 
-LaunchAgent `~/Library/LaunchAgents/com.wangyan.ccpa.plist`（label `com.wangyan.ccpa`，1148 bytes，3 月底就稳定了），启动命令：
+LaunchAgent `~/Library/LaunchAgents/com.wangyan.ccpa.plist`（label `com.wangyan.ccpa`），当前启动命令：
 
 ```bash
 /opt/homebrew/bin/node \
-  /Users/wangyan/ccpa/dist/index.js \
-  --config=/Users/wangyan/ccpa/config.yaml
+  /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/dist/index.js \
+  --config=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.yaml
 ```
 
-EnvironmentVariables 只有 `HOME=/Users/wangyan` 和 `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`，**没有 HTTPS_PROXY**（50.9 直连或 Surge 透明代理覆盖，不靠环境变量）。WorkingDirectory `/Users/wangyan/ccpa`，KeepAlive + RunAtLoad + `ThrottleInterval=5` + `Umask=63`（八进制 077）。`launchctl print gui/501/com.wangyan.ccpa` 状态 `running`、`runs=3`、PID 11734。
+EnvironmentVariables 只有 `HOME=/Users/wangyan` 和 `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`，**没有 HTTPS_PROXY**（50.9 直连或 Surge 透明代理覆盖，不靠环境变量）。WorkingDirectory `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`，KeepAlive + RunAtLoad + `ThrottleInterval=5` + `Umask=63`（八进制 077）。实际状态以 `launchctl print gui/501/com.wangyan.ccpa` 为准。
 
-日志单独放项目内 `~/ccpa/logs/launchd.{stdout,stderr}.log`（本机是 `/tmp/`）。2026-06-20 同步后，repo 内已有 `scripts/ccpa-log-maintenance.sh`；手动 healthcheck/rollout 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 顺手维护这些日志。
+日志仍写到旧树下的 `~/ccpa/logs/launchd.{stdout,stderr}.log`（本机是 `/tmp/`），这是 plist 的 `StandardOutPath` / `StandardErrorPath`，不代表 live 代码还从旧树运行。repo 内已有 `scripts/ccpa-log-maintenance.sh`；手动 healthcheck/rollout 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 顺手维护这些日志。
 
 Token 文件 `~/.auth2api/claude-<account>.json`（两台机器可以登同一个 Claude 订阅；mode 0600，约 400 bytes）。Codex auth `~/.codex/auth.json` 由 50.9 本地的 codex CLI 维护。
 
@@ -656,10 +656,10 @@ const CODEX_PREFIXES = ["gpt-", "codex-"];
 // 命中 claude-* → "claude"
 // 命中 gpt-*  / codex-* → "codex"
 // 命中 /^o\d/ (o1, o3, o4...) → "codex"
-// 其它 → null（404 unsupported_model）
+// 其它 → null（400 unsupported_model）
 ```
 
-裸 alias `opus` / `sonnet` / `haiku` **不走** prefix 路由，它们靠 `ClaudeProvider.supportsModel()`（claude.ts:38-49）单独识别——`CLAUDE_MODELS.includes(normalized)` 那一支兜住。所以加新别名必须改 `CLAUDE_MODELS`，否则 router 会 404。
+裸 alias `opus` / `sonnet` / `haiku` **不走** prefix 路由，它们靠 `ClaudeProvider.supportsModel()`（claude.ts:38-49）单独识别——`CLAUDE_MODELS.includes(normalized)` 那一支兜住。所以加新别名必须进入 Claude model 配置或默认模型集，否则请求会在本地返回 400 `unsupported_model`。
 
 进了 claude provider 之后，translator.ts:15-17 的 `resolveModel()` 把 alias 翻成具体上游 model 名再丢给 Anthropic API。MODEL_ALIASES 全集：
 
