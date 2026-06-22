@@ -10336,6 +10336,12 @@ test("local /v1 rate limit can be explicitly enabled", async (t) => {
     headers,
   });
   assert.equal(limited.status, 429);
+  assert.equal(limited.headers["x-ratelimit-limit"], "2");
+  assert.equal(limited.headers["x-ratelimit-remaining"], "0");
+  assert.match(String(limited.headers["x-ratelimit-reset"] || ""), /^\d+$/);
+  assert.match(String(limited.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(limited.headers["retry-after"]) >= 1);
+  assert.ok(Number(limited.headers["retry-after"]) <= 60);
   assert.equal(limited.body.error.message, "Too many requests");
   assert.equal(limited.body.error.type, "rate_limit_error");
   assert.equal(limited.body.error.code, "rate_limit_exceeded");

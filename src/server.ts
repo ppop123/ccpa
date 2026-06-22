@@ -34,6 +34,23 @@ function rateLimitBucketKey(req: express.Request): string {
   return `ip:${req.ip || req.socket.remoteAddress || "unknown"}`;
 }
 
+function setRateLimitHeaders(
+  res: express.Response,
+  limit: number,
+  remaining: number,
+  resetAt: number,
+  includeRetryAfter = false
+): void {
+  const now = Date.now();
+  const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
+  res.setHeader("X-RateLimit-Limit", String(limit));
+  res.setHeader("X-RateLimit-Remaining", String(Math.max(0, remaining)));
+  res.setHeader("X-RateLimit-Reset", String(Math.ceil(resetAt / 1000)));
+  if (includeRetryAfter) {
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+  }
+}
+
 function createRateLimitMiddleware(config: Config["rate-limit"]): express.RequestHandler | null {
   if (!config?.enabled) {
     return null;
@@ -57,12 +74,15 @@ function createRateLimitMiddleware(config: Config["rate-limit"]): express.Reques
     const entry = buckets.get(bucketKey);
 
     if (!entry || now > entry.resetAt) {
-      buckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+      const resetAt = now + windowMs;
+      buckets.set(bucketKey, { count: 1, resetAt });
+      setRateLimitHeaders(res, maxRequests, maxRequests - 1, resetAt);
       next();
       return;
     }
 
     entry.count++;
+    setRateLimitHeaders(res, maxRequests, maxRequests - entry.count, entry.resetAt, entry.count > maxRequests);
     if (entry.count > maxRequests) {
       res.status(429).json(rateLimitError("Too many requests", "rate_limit_exceeded"));
       return;
