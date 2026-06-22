@@ -74,6 +74,16 @@ function isPlaceholderKey(key) {
   );
 }
 
+function normalizeBoolean(value, fallback) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return fallback;
+}
+
 function checkConfig(config) {
   const findings = [];
   const warnings = [];
@@ -107,7 +117,7 @@ function checkConfig(config) {
   });
 
   const allInterfaceBind = host === "0.0.0.0" || host === "::" || host === "*";
-  const rateLimitEnabled = rateLimit.enabled === true;
+  const rateLimitEnabled = normalizeBoolean(rateLimit.enabled, false);
   if (allInterfaceBind && !rateLimitEnabled) {
     warnings.push({
       code: "all_interface_bind_without_rate_limit",

@@ -86,6 +86,30 @@ test("security posture warns but does not fail for all-interface bind with rate 
   assert.match(result.stdout, /security_posture: yes/);
 });
 
+test("security posture normalizes quoted rate limit booleans like runtime config", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-rate-limit-string-"));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  const configPath = writeConfig(
+    tmpDir,
+    [
+      'host: "0.0.0.0"',
+      "api-keys:",
+      '  - "sk-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"',
+      "rate-limit:",
+      '  enabled: "true"',
+      "",
+    ].join("\n")
+  );
+
+  const result = await runPosture(["--config", configPath]);
+
+  assert.equal(result.code, 0);
+  assert.doesNotMatch(result.stdout, /warning: all_interface_bind_without_rate_limit/);
+  assert.match(result.stdout, /findings: 0/);
+  assert.match(result.stdout, /warnings: 0/);
+  assert.match(result.stdout, /security_posture: yes/);
+});
+
 test("security posture passes strong localhost config", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-ok-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
