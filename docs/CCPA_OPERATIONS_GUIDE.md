@@ -36,6 +36,7 @@
 - Phase 177 起 `npm run release:verify` 默认包含 `npm run security:posture`，会阻断缺失、占位或弱客户端 API key；对 `host: 0.0.0.0` 且 `rate-limit.enabled: false` 的内网自用形态只告警不阻断。
 - Phase 181 起 CCPA 支持多个 `auth-dir/claude-*.json` Claude token 文件，按稳定顺序选择第一个可用账号，并持久化非敏感 cooldown/backoff/counter 状态。
 - Phase 184 起 build commit 校验贯穿 canary、rollout preflight、live rollout 和 release verify：`--require-build-commit <sha>` 会要求 `/health.build.git_commit` 等于目标提交。
+- Phase 187 起 rollout preflight 和 release verify 可显式要求外部 healthcheck wrapper 的 `cd` 目标：`--require-external-healthcheck-dir <dir>`。50.9 这种 clean candidate 部署必须用 candidate path，避免 wrapper 仍指向旧 dirty live tree。
 
 当前最可信的发布前门禁：
 
@@ -43,8 +44,8 @@
 npm run release:verify
 npm run release:readiness -- --list
 npm run release:readiness -- --write-json /tmp/ccpa-release-readiness.json
-npm run release:verify -- --require-provider-status ok --require-build-commit "$(git rev-parse HEAD)"
-npm run rollout:preflight -- --require-provider-status ok --require-build-commit "$(git rev-parse HEAD)"
+npm run release:verify -- --require-provider-status ok --require-build-commit "$(git rev-parse HEAD)" --require-external-healthcheck-dir "$(pwd)"
+npm run rollout:preflight -- --require-provider-status ok --require-build-commit "$(git rev-parse HEAD)" --require-external-healthcheck-dir "$(pwd)"
 npm run secrets:scan          # 只读 secret 扫描；覆盖 git candidates，不扫 tests/config.yaml
 npm run security:posture      # 只读配置姿态检查；强 API key 为硬门槛，内网无本地限流为 warning
 npm run security:audit         # npm audit --audit-level=moderate
@@ -62,6 +63,18 @@ npm run release:verify -- --require-provider-status ok
 ```
 
 当前本机和 50.9 live 都应使用 strict + build commit gate 证明运行态身份。如果未来 50.9 Claude token 再次过期，strict gate 会失败并打印 `provider_hint` 指向 `node dist/index.js --config=... --login --manual`。
+
+50.9 strict gate 还应显式要求 external healthcheck wrapper 指向 clean candidate：
+
+```bash
+cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529
+COMMIT="$(git rev-parse HEAD)"
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+  /opt/homebrew/bin/npm run release:verify -- \
+  --require-provider-status ok \
+  --require-build-commit "$COMMIT" \
+  --require-external-healthcheck-dir /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529
+```
 
 `npm run upstream:matrix -- --apply` 会真实请求本机 CCPA 并消耗 Claude/Codex 订阅额度；只有明确需要真上游验收时再跑。
 

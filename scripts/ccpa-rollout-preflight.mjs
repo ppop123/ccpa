@@ -40,6 +40,7 @@ function parseArgs(argv) {
     launchdLabel: process.env.CCPA_LAUNCHD_LABEL || defaultLaunchdLabel(),
     requireProviderStatus: process.env.CCPA_CANARY_REQUIRE_PROVIDER_STATUS || "degraded",
     requireBuildCommit: process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT || "",
+    requireExternalHealthcheckDir: process.env.CCPA_REQUIRE_EXTERNAL_HEALTHCHECK_DIR || "",
     timeoutMs: Number(process.env.CCPA_CANARY_TIMEOUT_MS || 5000),
   };
 
@@ -63,6 +64,7 @@ function parseArgs(argv) {
     else if (arg === "--launchd-label") args.launchdLabel = next();
     else if (arg === "--require-provider-status") args.requireProviderStatus = next();
     else if (arg === "--require-build-commit") args.requireBuildCommit = next();
+    else if (arg === "--require-external-healthcheck-dir") args.requireExternalHealthcheckDir = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -99,6 +101,8 @@ Options:
   --launchd-label label             launchctl label to print in next steps
   --require-provider-status value   any|degraded|ok for the canary
   --require-build-commit commit     Require /health build.git_commit in canary
+  --require-external-healthcheck-dir dir
+                                    Require external healthcheck cd target
   --timeout-ms ms                   Canary timeout
 
 Environment mirrors the script options with CCPA_* variables where possible.`);
@@ -111,13 +115,38 @@ function fileStatus(filePath, label) {
   return { ok: true, message: `${label}: ok ${filePath}` };
 }
 
-function inspectExternalHealthcheck(filePath) {
+function stripShellQuotes(value) {
+  const trimmed = String(value).trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  return trimmed;
+}
+
+function extractCdTargets(body) {
+  const targets = [];
+  const cdRe = /(?:^|\n)\s*cd\s+(?:--\s+)?("[^"\n]*"|'[^'\n]*'|[^#;&\s]+)/g;
+  let match;
+  while ((match = cdRe.exec(body)) !== null) {
+    targets.push(stripShellQuotes(match[1]));
+  }
+  return targets;
+}
+
+function inspectExternalHealthcheck(filePath, requiredDir = "") {
+  const required = requiredDir ? path.resolve(requiredDir) : "";
   if (!fs.existsSync(filePath)) {
-    return [`external healthcheck missing: ${filePath}`];
+    const message = `external healthcheck missing: ${filePath}`;
+    return required ? { warnings: [], failures: [message] } : { warnings: [message], failures: [] };
   }
 
   const warnings = [];
+  const failures = [];
   const body = fs.readFileSync(filePath, "utf8");
+  API_KEY_RE.lastIndex = 0;
   if (API_KEY_RE.test(body)) {
     warnings.push("external healthcheck has hardcoded API-key-shaped text");
   }
@@ -127,7 +156,20 @@ function inspectExternalHealthcheck(filePath) {
   if (!runsRepoHealthcheck) {
     warnings.push("external healthcheck does not appear to use repository canary/healthcheck");
   }
-  return warnings;
+  if (required) {
+    const cdTargets = extractCdTargets(body);
+    const normalizedTargets = cdTargets.map((target) =>
+      path.isAbsolute(target) ? path.resolve(target) : path.resolve(path.dirname(filePath), target)
+    );
+    if (normalizedTargets.length === 0) {
+      failures.push(`external healthcheck does not cd into required dir: ${required}`);
+    } else if (normalizedTargets[normalizedTargets.length - 1] !== required) {
+      failures.push(
+        `external healthcheck cd target mismatch: expected ${required}, found ${normalizedTargets[normalizedTargets.length - 1]}`
+      );
+    }
+  }
+  return { warnings, failures };
 }
 
 function runCanary(args) {
@@ -223,12 +265,19 @@ async function main() {
     if (!status.ok) failures.push(status.message);
   }
 
-  const externalWarnings = inspectExternalHealthcheck(args.externalHealthcheck);
-  if (externalWarnings.length === 0) {
+  const externalHealthcheck = inspectExternalHealthcheck(
+    args.externalHealthcheck,
+    args.requireExternalHealthcheckDir
+  );
+  if (externalHealthcheck.warnings.length === 0 && externalHealthcheck.failures.length === 0) {
     console.log(`external healthcheck: ok ${args.externalHealthcheck}`);
   } else {
-    for (const warning of externalWarnings) {
+    for (const warning of externalHealthcheck.warnings) {
       console.log(`warning: ${redact(warning)}`);
+    }
+    for (const failure of externalHealthcheck.failures) {
+      console.log(`error: ${redact(failure)}`);
+      failures.push(failure);
     }
   }
 

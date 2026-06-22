@@ -47,6 +47,9 @@ Options:
   --require-build-commit COMMIT
                        Optional runtime build.git_commit requirement passed to
                        rollout:preflight/canary.
+  --require-external-healthcheck-dir DIR
+                       Optional external healthcheck wrapper cd target required
+                       by rollout:preflight.
   --timeout-ms MS      Timeout per command, default 120000
   --help, -h           Show this help`);
 }
@@ -62,6 +65,10 @@ function parseArgs(argv) {
     requireBuildCommit:
       process.env.CCPA_RELEASE_VERIFY_REQUIRE_BUILD_COMMIT ||
       process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT ||
+      "",
+    requireExternalHealthcheckDir:
+      process.env.CCPA_RELEASE_VERIFY_REQUIRE_EXTERNAL_HEALTHCHECK_DIR ||
+      process.env.CCPA_REQUIRE_EXTERNAL_HEALTHCHECK_DIR ||
       "",
     timeoutMs: Number(process.env.CCPA_RELEASE_VERIFY_TIMEOUT_MS || 120000),
   };
@@ -82,6 +89,7 @@ function parseArgs(argv) {
     else if (arg === "--bash-bin") args.bashBin = next();
     else if (arg === "--require-provider-status") args.requireProviderStatus = next();
     else if (arg === "--require-build-commit") args.requireBuildCommit = next();
+    else if (arg === "--require-external-healthcheck-dir") args.requireExternalHealthcheckDir = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -192,6 +200,9 @@ function buildSteps(args) {
   if (args.requireBuildCommit) {
     preflightOptions.push("--require-build-commit", args.requireBuildCommit);
   }
+  if (args.requireExternalHealthcheckDir) {
+    preflightOptions.push("--require-external-healthcheck-dir", args.requireExternalHealthcheckDir);
+  }
   if (preflightOptions.length > 0) {
     preflightArgs.push("--", ...preflightOptions);
   }
@@ -272,6 +283,9 @@ async function main() {
   }
   if (args.requireBuildCommit) {
     console.log(`build_commit_required: ${args.requireBuildCommit}`);
+  }
+  if (args.requireExternalHealthcheckDir) {
+    console.log(`external_healthcheck_dir_required: ${args.requireExternalHealthcheckDir}`);
   }
 
   for (const step of buildSteps(args)) {

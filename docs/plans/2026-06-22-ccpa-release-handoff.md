@@ -13,7 +13,7 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 - Phase 184 example runtime commit before this handoff refresh: `caea69d Thread build commit through rollout gates`.
 - Primary push remote for this product fork: `ccpa https://github.com/ppop123/ccpa.git`
 - Local branch: pushed to `ccpa/codex/ccpa-stabilization`; use `git status --short --branch` and `npm run release:readiness -- --list` for the latest docs/source candidate state.
-- Local live service: after `npm run rollout:live -- --apply --require-build-commit "$COMMIT"`, `/health.build.git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"` passed with `release_verify: yes`
+- Local live service: after `npm run rollout:live -- --apply --require-build-commit "$COMMIT"`, `/health.build.git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT" --require-external-healthcheck-dir "$(pwd)"` passed with `release_verify: yes`
 - 50.9 live service: LaunchAgent now runs `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/dist/index.js` with `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.yaml`; strict canary reports `admin/accounts: ok (2/2 providers available)` and 13 models.
 - 50.9 old live tree: `/Users/wangyan/ccpa` is no longer the LaunchAgent working directory. It remains a dirty historical tree and rollback reference; do not stage or normalize its remote-only files as product code.
 - Dependency audit: local and 50.9 `npm audit --json` both report 0 vulnerabilities
@@ -31,6 +31,7 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 - Phase 182 note: `release:verify` strips `CCPA_*` runtime env from typecheck/test/diff/script-syntax steps while still allowing preflight/security posture to use explicit runtime config.
 - Phase 183 note: `/health` exposes non-secret `build.git_commit`, `git_branch`, `git_dirty`, and `built_at` metadata when `dist/build-info.json` exists.
 - Phase 184 note: `--require-build-commit <sha>` is now a first-class option for canary, rollout preflight, live rollout, and release verify.
+- Phase 187 note: `rollout:preflight` and `release:verify` can require the external healthcheck wrapper to `cd` into the deployed repo/candidate path via `--require-external-healthcheck-dir <dir>`.
 
 ## Candidate Shape
 
@@ -62,8 +63,9 @@ These commands are no-upstream or dry-run only:
 ```bash
 npm run release:readiness -- --list
 COMMIT="$(git rev-parse HEAD)"
-npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"
-npm run rollout:preflight -- --require-provider-status ok --require-build-commit "$COMMIT"
+DEPLOY_DIR="$(pwd)"
+npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT" --require-external-healthcheck-dir "$DEPLOY_DIR"
+npm run rollout:preflight -- --require-provider-status ok --require-build-commit "$COMMIT" --require-external-healthcheck-dir "$DEPLOY_DIR"
 npm run canary -- --require-provider-status ok --require-build-commit "$COMMIT"
 npm run secrets:scan
 npm run security:posture
@@ -80,7 +82,7 @@ Remote 50.9 equivalents should run with the non-login PATH:
 ```bash
 ssh wangyan@192.168.50.9 'PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm --version'
 ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa && PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run canary -- --url http://127.0.0.1:8317 --require-provider-status ok'
-ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529 && COMMIT="$(git rev-parse HEAD)" && CCPA_BASE_URL=http://127.0.0.1:8318 CCPA_CONFIG=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.candidate.yaml PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"'
+ssh wangyan@192.168.50.9 'cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529 && COMMIT="$(git rev-parse HEAD)" && CCPA_BASE_URL=http://127.0.0.1:8317 CCPA_CONFIG=/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.yaml PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /opt/homebrew/bin/npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT" --require-external-healthcheck-dir /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529'
 ```
 
 ## Quota-Spending Commands
@@ -103,12 +105,12 @@ Preferred next release workflow:
 2. Run strict local gate:
    ```bash
    COMMIT="$(git rev-parse HEAD)"
-   npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"
+   npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT" --require-external-healthcheck-dir "$(pwd)"
    ```
 3. Optionally run quota-spending upstream matrix after explicit approval.
 4. Keep pushing stabilization commits to `ccpa/codex/ccpa-stabilization`.
-5. For future 50.9 updates, refresh `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`, run `npm run build`, and use `npm run rollout:live -- --apply --require-build-commit "$COMMIT"` from that candidate path.
-6. After every cutover, run canary/release verify with `--require-build-commit <expected-sha>` from the deployed path.
+5. For future 50.9 updates, refresh `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`, run `npm run build`, and use `npm run rollout:live -- --apply --install-external-healthcheck --require-build-commit "$COMMIT"` from that candidate path.
+6. After every cutover, run canary/release verify with `--require-build-commit <expected-sha>` and `--require-external-healthcheck-dir <deployed-path>` from the deployed path.
 
 Avoid staging remote-only `.bak` files or root-level historical handoff copies from 50.9 unless a separate cleanup/reconciliation decision is made.
 

@@ -139,6 +139,7 @@ test("release verify help documents read-only aggregate gates", async () => {
   assert.match(result.stdout, /npm run test:unit/);
   assert.match(result.stdout, /npm run test:smoke/);
   assert.match(result.stdout, /npm run test:ops/);
+  assert.match(result.stdout, /--require-external-healthcheck-dir/);
   assert.match(result.stdout, /--require-build-commit/);
   assert.match(result.stdout, /git diff --check/);
   assert.match(result.stdout, /node --check for scripts\/ccpa-\*\.mjs/);
@@ -265,6 +266,36 @@ test("release verify can require a runtime build commit", async (t) => {
   assert.match(
     fs.readFileSync(logPath, "utf8"),
     /npm:run rollout:preflight -- --require-build-commit abc1234/
+  );
+});
+
+test("release verify can require the external healthcheck wrapper dir", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-healthcheck-dir-"));
+  const { repoDir, logPath, bins } = makeFakeTools(tmpDir);
+  const [npmBin, gitBin, nodeBin, bashBin] = bins;
+
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const result = await runVerify([
+    "--repo-dir",
+    repoDir,
+    "--npm-bin",
+    npmBin,
+    "--git-bin",
+    gitBin,
+    "--node-bin",
+    nodeBin,
+    "--bash-bin",
+    bashBin,
+    "--require-external-healthcheck-dir",
+    "/srv/ccpa-candidate",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /external_healthcheck_dir_required: \/srv\/ccpa-candidate/);
+  assert.match(
+    fs.readFileSync(logPath, "utf8"),
+    /npm:run rollout:preflight -- --require-external-healthcheck-dir \/srv\/ccpa-candidate/
   );
 });
 
