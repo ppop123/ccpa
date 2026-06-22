@@ -32,6 +32,7 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 - Phase 183 note: `/health` exposes non-secret `build.git_commit`, `git_branch`, `git_dirty`, and `built_at` metadata when `dist/build-info.json` exists.
 - Phase 184 note: `--require-build-commit <sha>` is now a first-class option for canary, rollout preflight, live rollout, and release verify.
 - Phase 187 note: `rollout:preflight` and `release:verify` can require the external healthcheck wrapper to `cd` into the deployed repo/candidate path via `--require-external-healthcheck-dir <dir>`.
+- Phase 188 note: `rollout:live --install-external-healthcheck` now preserves the resolved npm PATH for bare `npm` wrappers; 50.9 rollout commands should still pass `--npm-bin /opt/homebrew/bin/npm`.
 
 ## Candidate Shape
 
@@ -109,7 +110,7 @@ Preferred next release workflow:
    ```
 3. Optionally run quota-spending upstream matrix after explicit approval.
 4. Keep pushing stabilization commits to `ccpa/codex/ccpa-stabilization`.
-5. For future 50.9 updates, refresh `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`, run `npm run build`, and use `npm run rollout:live -- --apply --install-external-healthcheck --require-build-commit "$COMMIT"` from that candidate path.
+5. For future 50.9 updates, refresh `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`, run `npm run build`, and use `npm run rollout:live -- --apply --install-external-healthcheck --npm-bin /opt/homebrew/bin/npm --require-build-commit "$COMMIT"` from that candidate path.
 6. After every cutover, run canary/release verify with `--require-build-commit <expected-sha>` and `--require-external-healthcheck-dir <deployed-path>` from the deployed path.
 
 Avoid staging remote-only `.bak` files or root-level historical handoff copies from 50.9 unless a separate cleanup/reconciliation decision is made.

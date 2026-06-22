@@ -37,6 +37,7 @@
 - Phase 181 起 CCPA 支持多个 `auth-dir/claude-*.json` Claude token 文件，按稳定顺序选择第一个可用账号，并持久化非敏感 cooldown/backoff/counter 状态。
 - Phase 184 起 build commit 校验贯穿 canary、rollout preflight、live rollout 和 release verify：`--require-build-commit <sha>` 会要求 `/health.build.git_commit` 等于目标提交。
 - Phase 187 起 rollout preflight 和 release verify 可显式要求外部 healthcheck wrapper 的 `cd` 目标：`--require-external-healthcheck-dir <dir>`。50.9 这种 clean candidate 部署必须用 candidate path，避免 wrapper 仍指向旧 dirty live tree。
+- Phase 188 起 `rollout:live --install-external-healthcheck` 在 `--npm-bin` 是 bare command 时会把当前 PATH 里解析到的 npm 目录写进 wrapper，避免非登录环境下 `exec "npm"` 找不到命令。50.9 仍推荐显式传 `--npm-bin /opt/homebrew/bin/npm`。
 
 当前最可信的发布前门禁：
 
@@ -74,6 +75,19 @@ PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
   --require-provider-status ok \
   --require-build-commit "$COMMIT" \
   --require-external-healthcheck-dir /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529
+```
+
+50.9 从 candidate 执行 live rollout 时推荐显式 npm 路径：
+
+```bash
+cd /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529
+COMMIT="$(git rev-parse HEAD)"
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+  /opt/homebrew/bin/npm run rollout:live -- \
+  --apply \
+  --install-external-healthcheck \
+  --npm-bin /opt/homebrew/bin/npm \
+  --require-build-commit "$COMMIT"
 ```
 
 `npm run upstream:matrix -- --apply` 会真实请求本机 CCPA 并消耗 Claude/Codex 订阅额度；只有明确需要真上游验收时再跑。

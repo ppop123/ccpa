@@ -150,9 +150,24 @@ async function runWithRetries(command, args, options, attempts, delayMs) {
 function npmBinPathExport(npmBin) {
   const npmDir = path.dirname(npmBin);
   if (npmDir === "." || npmDir === "") {
-    return null;
+    const resolvedDir = findExecutableDir(npmBin, process.env.PATH || "");
+    return resolvedDir ? `export PATH=${JSON.stringify(`${resolvedDir}:\${PATH:-}`)}` : null;
   }
   return `export PATH=${JSON.stringify(`${npmDir}:\${PATH:-}`)}`;
+}
+
+function findExecutableDir(command, pathValue) {
+  for (const dir of String(pathValue).split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, command);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return dir;
+    } catch {
+      // Keep scanning PATH.
+    }
+  }
+  return "";
 }
 
 function writeExternalHealthcheckWrapper(args) {

@@ -312,3 +312,34 @@ test("ccpa live rollout apply can explicitly install a repository healthcheck wr
   assert.equal(backups.length, 1);
   assert.match(fs.readFileSync(path.join(tmpDir, backups[0]), "utf8"), /echo old sk-secret1234567890/);
 });
+
+test("ccpa live rollout preserves PATH for bare npm external healthcheck wrappers", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-install-bare-npm-"));
+  const { repoDir, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
+  const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
+  const npmDir = path.dirname(npmBin);
+  fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old\n");
+
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const result = await runRollout(
+    [
+      "--apply",
+      "--install-external-healthcheck",
+      "--repo-dir",
+      repoDir,
+      "--launchctl-bin",
+      launchctlBin,
+      "--external-healthcheck",
+      externalHealthcheck,
+    ],
+    {
+      PATH: `${npmDir}${path.delimiter}${process.env.PATH || ""}`,
+    }
+  );
+
+  assert.equal(result.code, 0);
+  const replacement = fs.readFileSync(externalHealthcheck, "utf8");
+  assert.match(replacement, new RegExp(`export PATH="${escapeRegExp(npmDir)}:\\$\\{PATH:-\\}"`));
+  assert.match(replacement, /exec "npm" run healthcheck -- "\$@"/);
+});
