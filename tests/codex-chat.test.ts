@@ -370,6 +370,55 @@ test("Codex chat completions adds image tool for explicit image_generation tool_
   assert.deepEqual(calls[0]?.body.tool_choice, { type: "image_generation" });
 });
 
+test("Codex chat completions does not auto-enable image tool when response_format requests text", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-response-format-no-image-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+  const calls: Array<{ body: any }> = [];
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async (_input, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ body });
+
+    return makeStreamResponse([
+      "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":1,\"item_id\":\"msg_1\",\"output_index\":0,\"content_index\":0,\"text\":\"{\\\"ok\\\":true}\"}\n\n",
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":2,\"response\":{\"status\":\"completed\",\"model\":\"gpt-5.4\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":3}\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{
+        role: "user",
+        content: "请返回 JSON，总结这段话：不要生成图片，也不要画一张图。",
+      }],
+      response_format: { type: "json_object" },
+      stream: false,
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.equal(calls[0]?.body.tools, undefined);
+  assert.equal(calls[0]?.body.tool_choice, undefined);
+  assert.deepEqual(calls[0]?.body.text?.format, { type: "json_object" });
+});
+
 test("Codex chat completions applies configured stream timeout to upstream fetch", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-timeout-config-"));
   const authFile = path.join(authDir, ".codex", "auth.json");

@@ -557,6 +557,9 @@ function shouldEnableImageGeneration(body: any, messages: any[]): boolean {
   if (Array.isArray(body?.modalities) && body.modalities.includes("image")) {
     return true;
   }
+  if (body?.response_format !== undefined) {
+    return false;
+  }
   return isImageGenerationRequest(messages);
 }
 
