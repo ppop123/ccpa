@@ -1150,6 +1150,37 @@ function validateChatLogprobs(body: any, res: express.Response): boolean {
   return true;
 }
 
+function validateChatLogitBias(body: any, res: express.Response): boolean {
+  const value = body?.logit_bias;
+  if (value === undefined) {
+    return true;
+  }
+
+  if (!isObjectRecord(value)) {
+    return failChatValidation(res, "invalid_logit_bias", "logit_bias must be an object");
+  }
+
+  const entries = Object.entries(value);
+  for (const [tokenId, bias] of entries) {
+    if (!/^(0|[1-9]\d*)$/.test(tokenId)) {
+      return failChatValidation(res, "invalid_logit_bias", "logit_bias keys must be token ids");
+    }
+    if (typeof bias !== "number" || !Number.isFinite(bias) || bias < -100 || bias > 100) {
+      return failChatValidation(
+        res,
+        "invalid_logit_bias",
+        "logit_bias values must be numbers between -100 and 100"
+      );
+    }
+  }
+
+  if (entries.length === 0) {
+    return true;
+  }
+
+  return failChatValidation(res, "unsupported_logit_bias", "logit_bias is unsupported");
+}
+
 function validateChatPenalty(
   body: any,
   res: express.Response,
@@ -2360,6 +2391,9 @@ export function createCodexChatCompletionsHandler(
         return;
       }
       if (!validateChatLogprobs(body, res)) {
+        return;
+      }
+      if (!validateChatLogitBias(body, res)) {
         return;
       }
       if (!validateChatStop(body, res)) {

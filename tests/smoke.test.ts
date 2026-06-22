@@ -6162,6 +6162,114 @@ test("OpenAI chat logprobs must be valid before upstream", async (t) => {
   assert.equal(calls.length, 0);
 });
 
+test("OpenAI chat logit_bias must be valid before upstream", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-logit-bias-"));
+  writeCodexAuth(authDir);
+  const manager = makeManager(authDir, [makeToken()]);
+  const calls: unknown[] = [];
+  const restoreFetch = withMockedFetch(async (input) => {
+    calls.push(input);
+    const url = String(input);
+    if (url.includes("anthropic.com")) {
+      return new Response(
+        JSON.stringify({
+          id: "msg_chat_logit_bias",
+          content: [{ type: "text", text: "empty logit_bias accepted" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return makeSseResponse([
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"resp_chat_logit_bias\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":2}\n\n",
+    ]);
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const invalids = [
+    {
+      body: { logit_bias: "none" },
+      message: "logit_bias must be an object",
+    },
+    {
+      body: { logit_bias: [] },
+      message: "logit_bias must be an object",
+    },
+    {
+      body: { logit_bias: { token_42: 1 } },
+      message: "logit_bias keys must be token ids",
+    },
+    {
+      body: { logit_bias: { "-1": 1 } },
+      message: "logit_bias keys must be token ids",
+    },
+    {
+      body: { logit_bias: { "42": "1" } },
+      message: "logit_bias values must be numbers between -100 and 100",
+    },
+    {
+      body: { logit_bias: { "42": 101 } },
+      message: "logit_bias values must be numbers between -100 and 100",
+    },
+    {
+      body: { logit_bias: { "42": 1 } },
+      message: "logit_bias is unsupported",
+    },
+  ];
+
+  for (const model of ["claude-sonnet-4-6", "gpt-5.4"]) {
+    for (const invalid of invalids) {
+      const resp = await requestJson({
+        server,
+        method: "POST",
+        path: "/v1/chat/completions",
+        headers: { Authorization: "Bearer test-key" },
+        body: {
+          model,
+          messages: [{ role: "user", content: "hello" }],
+          ...invalid.body,
+          stream: false,
+        },
+      });
+
+      assert.equal(resp.status, 400);
+      assert.equal(resp.body.error.message, invalid.message);
+      assert.equal(resp.body.error.type, "invalid_request_error");
+      assert.equal(resp.body.error.code, "invalid_parameter");
+    }
+  }
+
+  assert.equal(calls.length, 0);
+
+  for (const model of ["claude-sonnet-4-6", "gpt-5.4"]) {
+    const resp = await requestJson({
+      server,
+      method: "POST",
+      path: "/v1/chat/completions",
+      headers: { Authorization: "Bearer test-key" },
+      body: {
+        model,
+        messages: [{ role: "user", content: "hello" }],
+        logit_bias: {},
+        stream: false,
+      },
+    });
+
+    assert.equal(resp.status, 200);
+  }
+
+  assert.equal(calls.length, 2);
+});
+
 test("OpenAI chat penalties must be valid before upstream", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-penalties-"));
   writeCodexAuth(authDir);
