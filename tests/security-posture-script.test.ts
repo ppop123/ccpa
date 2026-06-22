@@ -62,6 +62,28 @@ test("security posture fails placeholder and weak API keys", async (t) => {
   assert.doesNotMatch(result.stdout, /sk-replace-with-a-long-random-key/);
 });
 
+test("security posture rejects long test API key placeholders", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-test-placeholder-"));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  const configPath = writeConfig(
+    tmpDir,
+    [
+      'host: "127.0.0.1"',
+      "api-keys:",
+      '  - "sk-test-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"',
+      "rate-limit:",
+      "  enabled: true",
+      "",
+    ].join("\n")
+  );
+
+  const result = await runPosture(["--config", configPath]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /finding: api_key_placeholder/);
+  assert.match(result.stdout, /security_posture: no/);
+});
+
 test("security posture warns but does not fail for all-interface bind with rate limit disabled", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-warn-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));

@@ -70,7 +70,7 @@ function isPlaceholderKey(key) {
     /replace/i.test(key) ||
     /redacted/i.test(key) ||
     /placeholder/i.test(key) ||
-    /^sk-(?:x+|example|test|dummy|local-redacted|remote-xxx|xxx)$/i.test(key)
+    /^sk-(?:x+|example|test|dummy|local-redacted|remote-xxx|xxx)(?:[-_].*)?$/i.test(key)
   );
 }
 
