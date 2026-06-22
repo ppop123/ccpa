@@ -21,3 +21,14 @@ test("Chinese README documents strict external healthcheck log-path contract", (
   assert.match(chineseReadme, /\/tmp\/ccpa\.\*/);
   assert.match(chineseReadme, /\$HOME\/ccpa\/logs\/launchd\.\{stdout,stderr\}\.log/);
 });
+
+test("README files point to the documentation map", () => {
+  const englishReadme = readRepoFile("README.md");
+  const chineseReadme = readRepoFile("README_CN.md");
+  const docsReadme = readRepoFile("docs/README.md");
+
+  assert.match(englishReadme, /\[Documentation map\]\(docs\/README\.md\)/);
+  assert.match(chineseReadme, /\[文档地图\]\(docs\/README\.md\)/);
+  assert.match(docsReadme, /\[Operations Guide\]\(CCPA_OPERATIONS_GUIDE\.md\)/);
+  assert.match(docsReadme, /\[Plan archive\]\(plans\/README\.md\)/);
+});

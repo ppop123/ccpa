@@ -16,6 +16,12 @@ Claude + Codex Proxy API
 
 仓库名是 `ccpa`，但运行时日志和部分配置路径里仍然会看到旧的内部名字 `auth2api`。
 
+## 文档
+
+- [文档地图](docs/README.md)：快速判断当前使用文档、运维 runbook、历史计划和 handoff 笔记分别在哪里。
+- [运维指南](docs/CCPA_OPERATIONS_GUIDE.md)：详细部署、端点、模型路由、OAuth 恢复、回滚和已知问题参考。
+- [计划归档](docs/plans/README.md)：按日期保存的设计、实现和稳定性修复记录。
+
 ## 它能做什么
 
 - 一个进程同时服务 Claude 和 Codex

@@ -16,6 +16,14 @@ It is intentionally not a multi-account pool, billing platform, or generic API g
 
 The repository is called `ccpa`. Some runtime logs and config paths still use the older internal name `auth2api`.
 
+## Documentation
+
+- [Documentation map](docs/README.md): where to find current usage docs,
+  operations runbooks, historical plans, and handoff notes.
+- [Operations Guide](docs/CCPA_OPERATIONS_GUIDE.md): detailed deployment,
+  endpoint, model-routing, OAuth recovery, rollback, and known-gap reference.
+- [Plan archive](docs/plans/README.md): dated design and stabilization notes.
+
 ## What it does
 
 - serves Claude and Codex from one process
