@@ -7,18 +7,26 @@ import { execFile } from "node:child_process";
 
 const RELEASE_VERIFY_SCRIPT = path.join(process.cwd(), "scripts", "ccpa-release-verify.mjs");
 
-function runVerify(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+function runVerify(
+  args: string[],
+  env?: NodeJS.ProcessEnv
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [RELEASE_VERIFY_SCRIPT, ...args], { timeout: 60_000 }, (error, stdout, stderr) => {
-      resolve({
-        code:
-          typeof (error as NodeJS.ErrnoException | null)?.code === "number"
-            ? Number((error as NodeJS.ErrnoException).code)
-            : 0,
-        stdout,
-        stderr,
-      });
-    });
+    execFile(
+      process.execPath,
+      [RELEASE_VERIFY_SCRIPT, ...args],
+      { timeout: 60_000, env: env ? { ...process.env, ...env } : process.env },
+      (error, stdout, stderr) => {
+        resolve({
+          code:
+            typeof (error as NodeJS.ErrnoException | null)?.code === "number"
+              ? Number((error as NodeJS.ErrnoException).code)
+              : 0,
+          stdout,
+          stderr,
+        });
+      }
+    );
   });
 }
 
@@ -58,6 +66,46 @@ function makeFakeTools(tmpDir: string, failingNeedle = ""): { repoDir: string; l
       `  echo '${name} saw private.user@example.com and sk-secret1234567890' >&2`,
       "  exit 9",
       "fi",
+      `echo '${name} ok'`,
+      "exit 0",
+      "",
+    ].join("\n");
+
+  const npmBin = path.join(binDir, "npm");
+  const gitBin = path.join(binDir, "git");
+  const nodeBin = path.join(binDir, "node");
+  const bashBin = path.join(binDir, "bash");
+  writeExecutable(npmBin, toolBody("npm"));
+  writeExecutable(gitBin, toolBody("git"));
+  writeExecutable(nodeBin, toolBody("node"));
+  writeExecutable(bashBin, toolBody("bash"));
+
+  return { repoDir, logPath, bins: [npmBin, gitBin, nodeBin, bashBin] };
+}
+
+function makeEnvLoggingFakeTools(tmpDir: string): { repoDir: string; logPath: string; bins: string[] } {
+  const repoDir = path.join(tmpDir, "repo");
+  const binDir = path.join(tmpDir, "bin");
+  const logPath = path.join(tmpDir, "calls.log");
+  fs.mkdirSync(path.join(repoDir, "scripts"), { recursive: true });
+  fs.mkdirSync(binDir, { recursive: true });
+  for (const script of [
+    "ccpa-canary.mjs",
+    "ccpa-contract-check.mjs",
+    "ccpa-release-readiness.mjs",
+    "ccpa-release-verify.mjs",
+    "ccpa-rollout-preflight.mjs",
+    "ccpa-secret-scan.mjs",
+    "ccpa-security-posture.mjs",
+    "ccpa-upstream-matrix.mjs",
+  ]) {
+    fs.writeFileSync(path.join(repoDir, "scripts", script), "// script\n");
+  }
+
+  const toolBody = (name: string) =>
+    [
+      "#!/usr/bin/env bash",
+      `printf '${name}:%s CCPA_BASE_URL=%s CCPA_CONFIG=%s CCPA_CANARY_CHECK_DIST=%s\\n' "$*" "\${CCPA_BASE_URL-}" "\${CCPA_CONFIG-}" "\${CCPA_CANARY_CHECK_DIST-}" >> ${JSON.stringify(logPath)}`,
       `echo '${name} ok'`,
       "exit 0",
       "",
@@ -187,6 +235,47 @@ test("release verify can require strict provider readiness", async (t) => {
     fs.readFileSync(logPath, "utf8"),
     /npm:run rollout:preflight -- --require-provider-status ok/
   );
+});
+
+test("release verify keeps CCPA runtime env out of test steps", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-env-"));
+  const { repoDir, logPath, bins } = makeEnvLoggingFakeTools(tmpDir);
+  const [npmBin, gitBin, nodeBin, bashBin] = bins;
+
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const result = await runVerify(
+    [
+      "--repo-dir",
+      repoDir,
+      "--npm-bin",
+      npmBin,
+      "--git-bin",
+      gitBin,
+      "--node-bin",
+      nodeBin,
+      "--bash-bin",
+      bashBin,
+    ],
+    {
+      CCPA_BASE_URL: "http://127.0.0.1:8318",
+      CCPA_CONFIG: "/tmp/ccpa-candidate-config.yaml",
+      CCPA_CANARY_CHECK_DIST: "false",
+    }
+  );
+
+  assert.equal(result.code, 0);
+  const calls = fs.readFileSync(logPath, "utf8");
+  assert.match(
+    calls,
+    /npm:run rollout:preflight CCPA_BASE_URL=http:\/\/127\.0\.0\.1:8318 CCPA_CONFIG=\/tmp\/ccpa-candidate-config\.yaml CCPA_CANARY_CHECK_DIST=false/
+  );
+  for (const step of ["test:unit", "test:smoke", "test:ops"]) {
+    assert.match(
+      calls,
+      new RegExp(`npm:run ${step} CCPA_BASE_URL= CCPA_CONFIG= CCPA_CANARY_CHECK_DIST=`)
+    );
+  }
 });
 
 test("release verify fails fast and redacts command output", async (t) => {

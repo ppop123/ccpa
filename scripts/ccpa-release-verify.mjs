@@ -94,7 +94,8 @@ function parseArgs(argv) {
   return args;
 }
 
-function runCommand(command, commandArgs, options) {
+function runCommand(command, commandArgs, options, commandOptions = {}) {
+  const env = commandOptions.sanitizeCcpaEnv ? sanitizeCcpaEnv(process.env) : process.env;
   return new Promise((resolve) => {
     execFile(
       command,
@@ -102,6 +103,7 @@ function runCommand(command, commandArgs, options) {
       {
         cwd: options.repoDir,
         timeout: options.timeoutMs,
+        env,
       },
       (error, stdout, stderr) => {
         resolve({
@@ -118,6 +120,16 @@ function runCommand(command, commandArgs, options) {
       }
     );
   });
+}
+
+function sanitizeCcpaEnv(env) {
+  const sanitized = { ...env };
+  for (const key of Object.keys(sanitized)) {
+    if (key.startsWith("CCPA_")) {
+      delete sanitized[key];
+    }
+  }
+  return sanitized;
 }
 
 function printCommandOutput(result) {
@@ -145,7 +157,7 @@ function discoverScripts(repoDir, extension) {
 
 async function runStep(step, args) {
   for (const command of step.commands) {
-    const result = await runCommand(command.bin, command.args, args);
+    const result = await runCommand(command.bin, command.args, args, command);
     if (result.code !== 0) {
       console.log(`step ${step.name}: failed (exit ${result.code})`);
       printCommandOutput(result);
@@ -172,12 +184,14 @@ function buildSteps(args) {
     ...nodeCheckScripts.map((scriptPath) => ({
       bin: args.nodeBin,
       args: ["--check", scriptPath],
+      sanitizeCcpaEnv: true,
     })),
   ];
   if (bashCheckScripts.length > 0) {
     scriptSyntaxCommands.push({
       bin: args.bashBin,
       args: ["-n", ...bashCheckScripts],
+      sanitizeCcpaEnv: true,
     });
   }
 
@@ -208,23 +222,23 @@ function buildSteps(args) {
     },
     {
       name: "typecheck",
-      commands: [{ bin: args.npmBin, args: ["run", "typecheck"] }],
+      commands: [{ bin: args.npmBin, args: ["run", "typecheck"], sanitizeCcpaEnv: true }],
     },
     {
       name: "test:unit",
-      commands: [{ bin: args.npmBin, args: ["run", "test:unit"] }],
+      commands: [{ bin: args.npmBin, args: ["run", "test:unit"], sanitizeCcpaEnv: true }],
     },
     {
       name: "test:smoke",
-      commands: [{ bin: args.npmBin, args: ["run", "test:smoke"] }],
+      commands: [{ bin: args.npmBin, args: ["run", "test:smoke"], sanitizeCcpaEnv: true }],
     },
     {
       name: "test:ops",
-      commands: [{ bin: args.npmBin, args: ["run", "test:ops"] }],
+      commands: [{ bin: args.npmBin, args: ["run", "test:ops"], sanitizeCcpaEnv: true }],
     },
     {
       name: "diff-check",
-      commands: [{ bin: args.gitBin, args: ["diff", "--check"] }],
+      commands: [{ bin: args.gitBin, args: ["diff", "--check"], sanitizeCcpaEnv: true }],
     },
     {
       name: "script-syntax",
