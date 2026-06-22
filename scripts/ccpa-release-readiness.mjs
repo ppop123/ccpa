@@ -16,7 +16,7 @@ Checks:
   - counts modified and untracked candidate files
   - groups candidate files by review bucket for release handoff
   - rejects visible transient artifacts such as .DS_Store, .claude worktrees,
-    and *.bak-pre-* backup files
+    and *.bak-* backup files
 
 Options:
   --repo-dir DIR       Repository directory, default cwd
@@ -94,7 +94,7 @@ function isTransientArtifact(filePath) {
     normalized === ".DS_Store" ||
     normalized.endsWith("/.DS_Store") ||
     normalized.startsWith(".claude/") ||
-    /\.bak-pre-[^/]+$/.test(normalized)
+    /(^|\/)[^/]+\.bak-[^/]+$/.test(normalized)
   );
 }
 

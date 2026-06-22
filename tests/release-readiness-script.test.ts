@@ -49,6 +49,7 @@ test("release readiness fails when transient artifacts are visible in git status
       "?? .DS_Store",
       "?? .claude/worktrees/vigilant-fermi-838b54/",
       "?? src/providers/codex-chat.ts.bak-pre-merge-2026-06-09",
+      "?? src/providers/codex-chat.ts.bak-toolsfix-2026-06-06",
       "?? scripts/ccpa-canary.mjs",
       "",
     ].join("\n")
@@ -59,10 +60,11 @@ test("release readiness fails when transient artifacts are visible in git status
   const result = await runReadiness(["--status-file", statusFile]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /transient artifacts: 3 visible/);
+  assert.match(result.stdout, /transient artifacts: 4 visible/);
   assert.match(result.stdout, /\.DS_Store/);
   assert.match(result.stdout, /\.claude\/worktrees\/vigilant-fermi-838b54\//);
   assert.match(result.stdout, /bak-pre-merge/);
+  assert.match(result.stdout, /bak-toolsfix/);
   assert.match(result.stdout, /release_ready: no/);
 });
 
