@@ -389,6 +389,10 @@ release gate.
 The default rollout preflight requirement is `degraded`, meaning at least one
 provider is available. Use `npm run release:verify -- --require-provider-status
 ok` when the handoff must prove both Claude and Codex are ready.
+When `--require-external-healthcheck-dir` is set, rollout preflight also treats
+the external wrapper's log-maintenance exports as part of the strict contract:
+the wrapper must enable `CCPA_HEALTHCHECK_MAINTAIN_LOGS` and set `CCPA_LOG_PATHS`
+for `/tmp/ccpa.*` plus `$HOME/ccpa/logs/launchd.{stdout,stderr}.log`.
 
 When you intentionally want to spend upstream quota for a real end-to-end
 matrix, start with the same dry-run plan used by `release:verify`:

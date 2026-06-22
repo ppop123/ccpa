@@ -39,6 +39,18 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function strictExternalHealthcheckBody(candidateDir: string, cdCommand = "cd"): string {
+  return [
+    "#!/usr/bin/env bash",
+    "set -u",
+    `${cdCommand} ${JSON.stringify(candidateDir)}`,
+    'export CCPA_HEALTHCHECK_MAINTAIN_LOGS="${CCPA_HEALTHCHECK_MAINTAIN_LOGS:-true}"',
+    'export CCPA_LOG_PATHS="${CCPA_LOG_PATHS:-/tmp/ccpa.stdout.log:/tmp/ccpa.stderr.log:/tmp/ccpa-healthcheck.log:${HOME:-}/ccpa/logs/launchd.stdout.log:${HOME:-}/ccpa/logs/launchd.stderr.log}"',
+    'exec "/opt/homebrew/bin/npm" run healthcheck -- "$@"',
+    "",
+  ].join("\n");
+}
+
 function writeBasicFiles(tmpDir: string): {
   config: string;
   dist: string;
@@ -73,6 +85,7 @@ test("ccpa rollout preflight documents read-only behavior and rollout controls",
   assert.match(result.stdout, /ccpa-contract-check\.mjs/);
   assert.match(result.stdout, /--external-healthcheck/);
   assert.match(result.stdout, /--require-external-healthcheck-dir/);
+  assert.match(result.stdout, /CCPA_LOG_PATHS/);
   assert.match(result.stdout, /--require-build-commit/);
   assert.match(result.stdout, /launchctl kickstart/);
 });
@@ -221,6 +234,43 @@ test("ccpa rollout preflight passes when local files and canary are ready", asyn
   assert.doesNotMatch(result.stdout, /sk-secret1234567890/);
 });
 
+test("ccpa rollout preflight recognizes quoted bare npm healthcheck wrappers", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-quoted-npm-"));
+  const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
+  const canary = path.join(tmpDir, "fake-canary.mjs");
+  const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
+
+  fs.writeFileSync(canary, "console.log('health: ok');\nprocess.exit(0);\n");
+  fs.writeFileSync(externalHealthcheck, '#!/usr/bin/env bash\nexec "npm" run healthcheck -- "$@"\n');
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const result = await runPreflight([
+    "--url",
+    "http://127.0.0.1:8317",
+    "--config",
+    config,
+    "--dist",
+    dist,
+    "--canary-script",
+    canary,
+    "--contract-script",
+    contract,
+    "--external-healthcheck",
+    externalHealthcheck,
+    "--repo-healthcheck",
+    repoHealthcheck,
+    "--log-maintenance",
+    logMaintenance,
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /external healthcheck: ok/);
+  assert.doesNotMatch(result.stdout, /external healthcheck does not appear to use repository canary\/healthcheck/);
+});
+
 test("ccpa rollout preflight fails when required external healthcheck dir drifts", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-dir-drift-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
@@ -281,6 +331,48 @@ test("ccpa rollout preflight accepts external healthcheck cd into the required d
 
   fs.mkdirSync(expectedDir, { recursive: true });
   fs.writeFileSync(canary, "console.log('health: ok');\nprocess.exit(0);\n");
+  fs.writeFileSync(externalHealthcheck, strictExternalHealthcheckBody(expectedDir));
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const result = await runPreflight([
+    "--url",
+    "http://127.0.0.1:8317",
+    "--config",
+    config,
+    "--dist",
+    dist,
+    "--canary-script",
+    canary,
+    "--contract-script",
+    contract,
+    "--external-healthcheck",
+    externalHealthcheck,
+    "--repo-healthcheck",
+    repoHealthcheck,
+    "--log-maintenance",
+    logMaintenance,
+    "--require-external-healthcheck-dir",
+    expectedDir,
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /external healthcheck: ok/);
+  assert.match(result.stdout, /ready: yes/);
+  assert.doesNotMatch(result.stdout, /external healthcheck cd target mismatch/);
+});
+
+test("ccpa rollout preflight fails when required external healthcheck omits log maintenance paths", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-log-paths-"));
+  const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
+  const canary = path.join(tmpDir, "fake-canary.mjs");
+  const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
+  const expectedDir = path.join(tmpDir, "candidate");
+
+  fs.mkdirSync(expectedDir, { recursive: true });
+  fs.writeFileSync(canary, "console.log('health: ok');\nprocess.exit(0);\n");
   fs.writeFileSync(
     externalHealthcheck,
     [
@@ -316,10 +408,10 @@ test("ccpa rollout preflight accepts external healthcheck cd into the required d
     expectedDir,
   ]);
 
-  assert.equal(result.code, 0);
-  assert.match(result.stdout, /external healthcheck: ok/);
-  assert.match(result.stdout, /ready: yes/);
-  assert.doesNotMatch(result.stdout, /external healthcheck cd target mismatch/);
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /external healthcheck does not enable log maintenance/);
+  assert.match(result.stdout, /external healthcheck does not set CCPA_LOG_PATHS/);
+  assert.match(result.stdout, /ready: no/);
 });
 
 test("ccpa rollout preflight accepts cd dashdash into the required dir", async (t) => {
@@ -331,15 +423,7 @@ test("ccpa rollout preflight accepts cd dashdash into the required dir", async (
 
   fs.mkdirSync(expectedDir, { recursive: true });
   fs.writeFileSync(canary, "console.log('health: ok');\nprocess.exit(0);\n");
-  fs.writeFileSync(
-    externalHealthcheck,
-    [
-      "#!/usr/bin/env bash",
-      `cd -- ${JSON.stringify(expectedDir)}`,
-      'exec "/opt/homebrew/bin/npm" run healthcheck -- "$@"',
-      "",
-    ].join("\n")
-  );
+  fs.writeFileSync(externalHealthcheck, strictExternalHealthcheckBody(expectedDir, "cd --"));
 
   t.after(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });

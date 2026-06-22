@@ -102,7 +102,8 @@ Options:
   --require-provider-status value   any|degraded|ok for the canary
   --require-build-commit commit     Require /health build.git_commit in canary
   --require-external-healthcheck-dir dir
-                                    Require external healthcheck cd target
+                                    Require external healthcheck cd target and
+                                    CCPA_LOG_PATHS log maintenance defaults
   --timeout-ms ms                   Canary timeout
 
 Environment mirrors the script options with CCPA_* variables where possible.`);
@@ -136,6 +137,14 @@ function extractCdTargets(body) {
   return targets;
 }
 
+const REQUIRED_EXTERNAL_LOG_PATHS = [
+  { label: "/tmp/ccpa.stdout.log", pattern: /\/tmp\/ccpa\.stdout\.log/ },
+  { label: "/tmp/ccpa.stderr.log", pattern: /\/tmp\/ccpa\.stderr\.log/ },
+  { label: "/tmp/ccpa-healthcheck.log", pattern: /\/tmp\/ccpa-healthcheck\.log/ },
+  { label: "$HOME/ccpa/logs/launchd.stdout.log", pattern: /\/ccpa\/logs\/launchd\.stdout\.log/ },
+  { label: "$HOME/ccpa/logs/launchd.stderr.log", pattern: /\/ccpa\/logs\/launchd\.stderr\.log/ },
+];
+
 function inspectExternalHealthcheck(filePath, requiredDir = "") {
   const required = requiredDir ? path.resolve(requiredDir) : "";
   if (!fs.existsSync(filePath)) {
@@ -152,11 +161,24 @@ function inspectExternalHealthcheck(filePath, requiredDir = "") {
   }
   const runsRepoHealthcheck =
     /ccpa-healthcheck\.sh|ccpa-canary\.mjs/.test(body) ||
-    /(?:^|\s)(?:"[^"\n]*\/npm"|'[^'\n]*\/npm'|npm)\s+run\s+healthcheck/.test(body);
+    /(?:^|\s)(?:"(?:[^"\n]*\/)?npm"|'(?:[^'\n]*\/)?npm'|npm)\s+run\s+healthcheck/.test(body);
   if (!runsRepoHealthcheck) {
     warnings.push("external healthcheck does not appear to use repository canary/healthcheck");
   }
   if (required) {
+    if (!/CCPA_HEALTHCHECK_MAINTAIN_LOGS/.test(body)) {
+      failures.push("external healthcheck does not enable log maintenance");
+    }
+    if (!/CCPA_LOG_PATHS/.test(body)) {
+      failures.push("external healthcheck does not set CCPA_LOG_PATHS");
+    } else {
+      for (const requiredPath of REQUIRED_EXTERNAL_LOG_PATHS) {
+        if (!requiredPath.pattern.test(body)) {
+          failures.push(`external healthcheck CCPA_LOG_PATHS missing ${requiredPath.label}`);
+        }
+      }
+    }
+
     const cdTargets = extractCdTargets(body);
     const normalizedTargets = cdTargets.map((target) =>
       path.isAbsolute(target) ? path.resolve(target) : path.resolve(path.dirname(filePath), target)

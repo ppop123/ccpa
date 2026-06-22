@@ -78,6 +78,8 @@ PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
   --require-external-healthcheck-dir /Users/wangyan/ccpa-candidates/f3afdf0-20260622165529
 ```
 
+2026-06-22 起，`--require-external-healthcheck-dir` 也会把外部 wrapper 的日志维护导出纳入 strict contract：wrapper 必须启用 `CCPA_HEALTHCHECK_MAINTAIN_LOGS`，并设置覆盖 `/tmp/ccpa.*` 与 `$HOME/ccpa/logs/launchd.{stdout,stderr}.log` 的 `CCPA_LOG_PATHS`。这能防止 50.9 wrapper 目录正确但 launchd 日志维护静默退化。
+
 50.9 从 candidate 执行 live rollout 时推荐显式 npm 路径：
 
 ```bash
@@ -1374,7 +1376,7 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 |---|---|---|
 | `/admin/accounts` provider status visibility | **closed**：响应现在包含 `server` readiness、`claude` 和 `codex`；`accounts` 数组仍只代表 Claude OAuth account pool | 若未来 Codex 支持多账号，再设计独立账号池结构 |
 | cache usage aggregation | **closed**：`UsageTracker` 已聚合 cache creation/read/hit rate，`/monitor` 与 admin usage 已展示 | 继续用 smoke/admin-usage 测试防回归 |
-| stderr log 无 rotate | **closed/guarded**：已有 `scripts/ccpa-log-maintenance.sh`；healthcheck 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 在 canary 前执行；2026-06-22 起 rollout 安装的外部 healthcheck wrapper 还会默认设置 `CCPA_LOG_PATHS` 覆盖本机 `/tmp/ccpa.*` 与 50.9 `$HOME/ccpa/logs/launchd.*` | 若公网化再考虑系统级 logrotate/newsyslog |
+| stderr log 无 rotate | **closed/guarded**：已有 `scripts/ccpa-log-maintenance.sh`；healthcheck 可通过 `CCPA_HEALTHCHECK_MAINTAIN_LOGS=true` 在 canary 前执行；2026-06-22 起 rollout 安装的外部 healthcheck wrapper 还会默认设置 `CCPA_LOG_PATHS` 覆盖本机 `/tmp/ccpa.*` 与 50.9 `$HOME/ccpa/logs/launchd.*`，strict preflight 会防止该导出漂移 | 若公网化再考虑系统级 logrotate/newsyslog |
 
 ### P3 — 边缘 / 体验
 
