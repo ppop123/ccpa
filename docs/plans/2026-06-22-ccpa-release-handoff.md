@@ -14,8 +14,8 @@ The goal of the candidate is to turn the local and 50.9 deployments from daily f
 - Primary push remote for this product fork: `ccpa https://github.com/ppop123/ccpa.git`
 - Local branch: pushed to `ccpa/codex/ccpa-stabilization`; use `git status --short --branch` and `npm run release:readiness -- --list` for the latest docs/source candidate state.
 - Local live service: after `npm run rollout:live -- --apply --require-build-commit "$COMMIT"`, `/health.build.git_dirty=false`; strict `npm run release:verify -- --require-provider-status ok --require-build-commit "$COMMIT"` passed with `release_verify: yes`
-- 50.9 live service: healthy from `/Users/wangyan/ccpa`, strict canary reports `admin/accounts: ok (2/2 providers available)` and 13 models, but it is still the dirty live tree rather than the latest clean candidate.
-- 50.9 clean candidate: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529` has passed temporary 8318 strict `release:verify -- --require-provider-status ok --require-build-commit <expected-sha>`; update it to the current pushed commit and re-run the same gate before any live cutover.
+- 50.9 live service: LaunchAgent now runs `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/dist/index.js` with `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529/config.yaml`; strict canary reports `admin/accounts: ok (2/2 providers available)` and 13 models.
+- 50.9 old live tree: `/Users/wangyan/ccpa` is no longer the LaunchAgent working directory. It remains a dirty historical tree and rollback reference; do not stage or normalize its remote-only files as product code.
 - Dependency audit: local and 50.9 `npm audit --json` both report 0 vulnerabilities
 - Config security posture: local and 50.9 `npm run security:posture` both report `findings: 0`, `security_posture: yes`; both warn that all-interface intranet bind is running without local rate limiting.
 - Phase 169 note: explicit custom or empty `claude.models` is now enforced in both provider support checks and server routing; default built-in Claude models still allow future `claude-*` IDs.
@@ -42,14 +42,14 @@ Latest local readiness:
 - `untracked candidates: 0`
 - `transient artifacts: 0 visible`
 
-Latest 50.9 clean candidate readiness:
+Latest 50.9 live/candidate readiness:
 
 - Candidate path: `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`
 - Commit: use `git rev-parse HEAD` inside the candidate worktree and require that value in canary/release verify
-- Strict release gate: passed on temporary `127.0.0.1:8318`
-- Temporary port cleanup: `port_8318_clear`
+- Strict release gate: passed against live `127.0.0.1:8317`
+- LaunchAgent rollback backup: `/Users/wangyan/Library/LaunchAgents/com.wangyan.ccpa.plist.bak-pre-clean-candidate-<short-sha>-<timestamp>`
 
-Treat the local `/Users/wy/auth2api` branch and the remote clean candidate above as the code source of truth. The 50.9 live tree remains a separate operational deployment target and should not be normalized by staging remote-only historical files.
+Treat the local `/Users/wy/auth2api` branch and the remote clean candidate above as the code source of truth. The old `/Users/wangyan/ccpa` tree remains useful for rollback history and logs, but it is no longer the live runtime source.
 
 ## Review Buckets
 
@@ -107,15 +107,13 @@ Preferred next release workflow:
    ```
 3. Optionally run quota-spending upstream matrix after explicit approval.
 4. Keep pushing stabilization commits to `ccpa/codex/ccpa-stabilization`.
-5. For 50.9 live cutover, choose one explicit operational path:
-   - switch LaunchAgent to the verified clean candidate path, using the live `config.yaml`;
-   - or back up and normalize `/Users/wangyan/ccpa` to the stabilization branch.
-6. After cutover, run canary/release verify with `--require-build-commit <expected-sha>` from the deployed path.
+5. For future 50.9 updates, refresh `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`, run `npm run build`, and use `npm run rollout:live -- --apply --require-build-commit "$COMMIT"` from that candidate path.
+6. After every cutover, run canary/release verify with `--require-build-commit <expected-sha>` from the deployed path.
 
 Avoid staging remote-only `.bak` files or root-level historical handoff copies from 50.9 unless a separate cleanup/reconciliation decision is made.
 
 ## Remaining Product Gaps
 
 - True upstream acceptance is still dry-run only until `upstream:matrix --apply` is explicitly approved and passes.
-- 50.9 live has not yet been cut over to the latest verified clean candidate; it is healthy but still runs `/Users/wangyan/ccpa` dirty tree.
+- The old `/Users/wangyan/ccpa` tree is still dirty and should be treated as rollback/history, not the source of truth.
 - `/v1/embeddings` intentionally returns JSON `endpoint_not_implemented`; actual embeddings generation is still not implemented.

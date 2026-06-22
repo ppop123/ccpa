@@ -5,7 +5,7 @@
 
 **版本**：2026-06-09 状态快照；2026-06-22 本机 + 50.9 运维状态校订
 **部署位置**：本机 `~/auth2api/` (port 8317) + 50.9 `~/ccpa/` (port 8317)
-**两边代码**：2026-06-09 成文时 4 个关键源文件 md5 完全一致（translator / manager / codex-chat / codex-sse）。2026-06-22 本机稳定分支已推进到 `codex/ccpa-stabilization`；50.9 live 仍运行 `/Users/wangyan/ccpa` dirty tree，最新候选已在独立 clean worktree 验证，切换 live 需单独确认。
+**两边代码**：2026-06-09 成文时 4 个关键源文件 md5 完全一致（translator / manager / codex-chat / codex-sse）。2026-06-22 本机稳定分支已推进到 `codex/ccpa-stabilization`；50.9 live 已切到 clean candidate `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`，旧 `/Users/wangyan/ccpa` dirty tree 只作为历史/回滚参照。
 
 ## 0. 当前状态覆盖说明（2026-06-22）
 
@@ -19,7 +19,7 @@
 - `/tmp/ccpa.stdout.log`、`/tmp/ccpa.stderr.log`、`/tmp/ccpa-healthcheck.log` 已有 repo 管理的维护脚本和 healthcheck opt-in；本机 `/Users/wy/ccpa-healthcheck.sh` 与 50.9 `/Users/wangyan/ccpa-healthcheck.sh` 都已替换为仓库 wrapper。
 - cloaking billing build hash 已稳定为配置项/默认值，不再每次请求随机；`cch` 仍随 payload 变化。
 - rate-limit 默认关闭是自用内网部署的有意默认。若暴露到公网或多客户端环境，应在 `config.yaml` 显式开启。
-- 50.9 live 在 2026-06-22 已重新完成 CCPA Claude OAuth 登录，当前 strict canary provider readiness 为 `ok`：Claude 与 Codex 两个 provider 都可用；`/v1/models` 当前 13 个模型，外部 healthcheck wrapper 已安装并可在非登录 PATH 下直接运行。但 live tree 仍是 dirty `main`，不是最新 `codex/ccpa-stabilization` clean candidate。
+- 50.9 live 在 2026-06-22 已重新完成 CCPA Claude OAuth 登录并切到 clean candidate，当前 strict canary provider readiness 为 `ok`：Claude 与 Codex 两个 provider 都可用；`/v1/models` 当前 13 个模型，外部 healthcheck wrapper 已指向 candidate path 并可在非登录 PATH 下直接运行。
 - canary/preflight/strict release gate 现在会在 provider degraded 时打印 `provider_hint`，例如 Claude 过期会直接提示 `node dist/index.js --config=... --login --manual`，而不是只给 generic degraded 错误。
 - canary 支持 `--require-build-commit <sha>`，可用 `/health.build.git_commit` 证明 live runtime 是否真的跑某个候选提交，避免只靠 dist mtime 判断。
 - 50.9 的 `codex.models` 已补齐 `gpt-image-2`，避免 Images API contract 在路由层先报 `unsupported_model`。
@@ -61,7 +61,7 @@ npm run rollout:preflight
 npm run release:verify -- --require-provider-status ok
 ```
 
-当前本机和 50.9 clean candidate 都应使用 strict + build commit gate 证明运行态身份；50.9 live 8317 仍健康但尚未切到最新 clean candidate。如果未来 50.9 Claude token 再次过期，strict gate 会失败并打印 `provider_hint` 指向 `node dist/index.js --config=... --login --manual`。
+当前本机和 50.9 live 都应使用 strict + build commit gate 证明运行态身份。如果未来 50.9 Claude token 再次过期，strict gate 会失败并打印 `provider_hint` 指向 `node dist/index.js --config=... --login --manual`。
 
 `npm run upstream:matrix -- --apply` 会真实请求本机 CCPA 并消耗 Claude/Codex 订阅额度；只有明确需要真上游验收时再跑。
 
@@ -325,7 +325,7 @@ ssh wangyan@192.168.50.9 'curl -sS http://127.0.0.1:8317/health'
 | 用户 / uid | `wy` / 503 | `wangyan` / 501 |
 | 项目目录 | `~/auth2api/` | `~/ccpa/` |
 | Git remote | `ccpa` + `fork` + `origin` 三个 | 单 `origin = ppop123/ccpa` |
-| 当前 commit | `codex/ccpa-stabilization`；以 `npm run canary -- --require-build-commit "$(git rev-parse HEAD)"` 实测为准 | live 仍是 `/Users/wangyan/ccpa` dirty tree；clean candidate `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529` 每次切换前都要重新以 `git rev-parse HEAD` + build commit gate 验证 |
+| 当前 commit | `codex/ccpa-stabilization`；以 `npm run canary -- --require-build-commit "$(git rev-parse HEAD)"` 实测为准 | live 已指向 `/Users/wangyan/ccpa-candidates/f3afdf0-20260622165529`；每次更新前都要重新以 `git rev-parse HEAD` + build commit gate 验证 |
 | Node 路径 | `~/.nvm/versions/node/v22.14.0/bin/node` | `/opt/homebrew/bin/node` |
 | Plist label | `com.wy.ccpa` | `com.wangyan.ccpa` |
 | HTTPS_PROXY | `http://127.0.0.1:6152`（Surge） | 不设（直连 / 透明代理） |
