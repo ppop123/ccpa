@@ -290,6 +290,14 @@ process started after the local dist build time. Use `--no-dist-check` when
 checking a remote instance from a machine that does not share the same dist
 files.
 
+`npm run build` writes `dist/build-info.json`, and `/health` exposes the build
+git commit. When you need to prove that the live process is running a specific
+candidate commit, run:
+
+```bash
+npm run canary -- --url http://127.0.0.1:8317 --require-build-commit "$(git rev-parse HEAD)"
+```
+
 Run the no-upstream OpenAI-compatible contract gate when you want broader
 protocol coverage without spending upstream quota:
 

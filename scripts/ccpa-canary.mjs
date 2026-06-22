@@ -12,6 +12,7 @@ function parseArgs(argv) {
     dist: process.env.CCPA_DIST_PATH || path.join(process.cwd(), "dist", "index.js"),
     checkDist: process.env.CCPA_CANARY_CHECK_DIST !== "false",
     requireProviderStatus: process.env.CCPA_CANARY_REQUIRE_PROVIDER_STATUS || "degraded",
+    requireBuildCommit: process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT || "",
     timeoutMs: Number(process.env.CCPA_CANARY_TIMEOUT_MS || 5000),
   };
 
@@ -32,6 +33,7 @@ function parseArgs(argv) {
     else if (arg === "--dist") args.dist = next();
     else if (arg === "--no-dist-check") args.checkDist = false;
     else if (arg === "--require-provider-status") args.requireProviderStatus = next();
+    else if (arg === "--require-build-commit") args.requireBuildCommit = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -50,7 +52,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/ccpa-canary.mjs [--url URL] [--config config.yaml] [--api-key KEY] [--dist dist/index.js] [--no-dist-check] [--require-provider-status any|degraded|ok]
+  console.log(`Usage: node scripts/ccpa-canary.mjs [--url URL] [--config config.yaml] [--api-key KEY] [--dist dist/index.js] [--no-dist-check] [--require-provider-status any|degraded|ok] [--require-build-commit COMMIT]
 
 Runs low-cost checks against a running CCPA instance:
   - GET /health
@@ -66,6 +68,7 @@ Environment:
   CCPA_DIST_PATH
   CCPA_CANARY_CHECK_DIST=false
   CCPA_CANARY_REQUIRE_PROVIDER_STATUS=degraded
+  CCPA_CANARY_REQUIRE_BUILD_COMMIT
   CCPA_CANARY_TIMEOUT_MS`);
 }
 
@@ -148,6 +151,39 @@ function assertDistFreshness(health, distPath) {
     );
   }
   return distStat.mtime.toISOString();
+}
+
+function runtimeBuildSummary(health) {
+  const build = health?.build;
+  if (!build || typeof build !== "object" || Array.isArray(build)) {
+    return null;
+  }
+
+  const commit = typeof build.git_commit === "string" ? build.git_commit.trim() : "";
+  if (!commit) {
+    return null;
+  }
+
+  const branch = typeof build.git_branch === "string" && build.git_branch.trim() ? build.git_branch.trim() : "unknown";
+  const dirty = typeof build.git_dirty === "boolean" ? String(build.git_dirty) : "unknown";
+  const builtAt = typeof build.built_at === "string" && build.built_at.trim() ? ` built_at=${build.built_at.trim()}` : "";
+  return {
+    commit,
+    line: `build: git_commit=${commit} git_branch=${branch} git_dirty=${dirty}${builtAt}`,
+  };
+}
+
+function assertRequiredBuildCommit(health, requiredCommit) {
+  if (!requiredCommit) {
+    return;
+  }
+  const summary = runtimeBuildSummary(health);
+  if (!summary) {
+    throw new Error("health missing runtime build git_commit");
+  }
+  if (summary.commit !== requiredCommit) {
+    throw new Error(`runtime build commit ${summary.commit} does not match required ${requiredCommit}`);
+  }
 }
 
 function assertJsonResponse(contentType, pathName) {
@@ -265,7 +301,12 @@ async function runCanary(args) {
   const health = await fetchJson(baseUrl, "/health", { method: "GET" }, args.timeoutMs);
   assertJsonResponse(health.contentType, "/health");
   assertRuntimeIdentity(health.body);
+  assertRequiredBuildCommit(health.body, args.requireBuildCommit);
   results.push(`health: ok ${health.body.service}@${health.body.version} started_at=${health.body.started_at}`);
+  const buildSummary = runtimeBuildSummary(health.body);
+  if (buildSummary) {
+    results.push(buildSummary.line);
+  }
   if (args.checkDist) {
     const distMtime = assertDistFreshness(health.body, args.dist);
     if (distMtime) {

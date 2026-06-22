@@ -287,12 +287,29 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
 test("public health exposes runtime identity without provider details", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-"));
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-home-"));
+  const buildInfoPath = path.join(authDir, "build-info.json");
+  fs.writeFileSync(
+    buildInfoPath,
+    JSON.stringify({
+      git_commit: "abc1234",
+      git_branch: "codex/test-build-info",
+      git_dirty: false,
+      built_at: "2026-06-22T00:00:00.000Z",
+    })
+  );
+  const originalBuildInfoFile = process.env.CCPA_BUILD_INFO_FILE;
+  process.env.CCPA_BUILD_INFO_FILE = buildInfoPath;
   const config = makeConfig(authDir, path.join(authDir, ".codex", "auth.json"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = withHomeDir(tmpHome, () => startApp(config, manager));
 
   t.after(async () => {
     await stopApp(await server);
+    if (originalBuildInfoFile === undefined) {
+      delete process.env.CCPA_BUILD_INFO_FILE;
+    } else {
+      process.env.CCPA_BUILD_INFO_FILE = originalBuildInfoFile;
+    }
     fs.rmSync(authDir, { recursive: true, force: true });
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
@@ -309,6 +326,12 @@ test("public health exposes runtime identity without provider details", async (t
   assert.equal(healthResp.body.version, PACKAGE_VERSION);
   assert.match(healthResp.body.started_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(typeof healthResp.body.uptime_ms, "number");
+  assert.deepEqual(healthResp.body.build, {
+    git_commit: "abc1234",
+    git_branch: "codex/test-build-info",
+    git_dirty: false,
+    built_at: "2026-06-22T00:00:00.000Z",
+  });
   assert.equal(healthResp.body.accounts, undefined);
   assert.equal(healthResp.body.claude, undefined);
   assert.equal(healthResp.body.codex, undefined);

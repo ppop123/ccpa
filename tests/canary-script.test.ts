@@ -22,6 +22,7 @@ type ProviderStatus = "ok" | "degraded" | "unavailable";
 interface CanaryServerOptions {
   legacyHealth?: boolean;
   startedAt?: string;
+  build?: unknown;
   providerStatus?: ProviderStatus;
   providers?: { total: number; available: number; unavailable: string[] };
   claude?: unknown;
@@ -49,6 +50,7 @@ async function startCanaryServer(options: CanaryServerOptions = {}): Promise<htt
               version: "1.1.0",
               started_at: options.startedAt || "2026-06-18T00:00:00.000Z",
               uptime_ms: 1234,
+              ...(options.build !== undefined ? { build: options.build } : {}),
             }
       );
       return;
@@ -335,4 +337,52 @@ test("ccpa canary passes strict provider readiness when all providers are availa
   assert.match(result.stdout, /admin\/accounts: ok \(2\/2 providers available\)/);
   assert.doesNotMatch(result.stdout, /test-key/);
   assert.doesNotMatch(result.stderr, /test-key/);
+});
+
+test("ccpa canary can require a specific runtime build commit", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-build-"));
+  const server = await startCanaryServer({
+    build: {
+      git_commit: "abc1234",
+      git_branch: "codex/runtime-build",
+      git_dirty: false,
+      built_at: "2026-06-22T00:00:00.000Z",
+    },
+  });
+  const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
+  const configPath = writeConfig(tmpDir);
+  const distPath = writeDistMarker(tmpDir, new Date("2026-06-17T23:59:00.000Z"));
+
+  t.after(async () => {
+    await stopServer(server);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const result = await runCanary([
+    "--url",
+    baseUrl,
+    "--config",
+    configPath,
+    "--dist",
+    distPath,
+    "--require-build-commit",
+    "abc1234",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /build: git_commit=abc1234 git_branch=codex\/runtime-build git_dirty=false/);
+
+  const mismatch = await runCanary([
+    "--url",
+    baseUrl,
+    "--config",
+    configPath,
+    "--dist",
+    distPath,
+    "--require-build-commit",
+    "def5678",
+  ]);
+
+  assert.notEqual(mismatch.code, 0);
+  assert.match(mismatch.stderr, /runtime build commit abc1234 does not match required def5678/);
 });

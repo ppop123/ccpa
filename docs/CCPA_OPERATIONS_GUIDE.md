@@ -5,7 +5,7 @@
 
 **版本**：2026-06-09 状态快照；2026-06-22 本机 + 50.9 运维状态校订
 **部署位置**：本机 `~/auth2api/` (port 8317) + 50.9 `~/ccpa/` (port 8317)
-**两边代码**：2026-06-09 成文时 4 个关键源文件 md5 完全一致（translator / manager / codex-chat / codex-sse）。2026-06-20 已将本机稳定候选同步到 50.9，并在两边跑通 no-upstream release gates。
+**两边代码**：2026-06-09 成文时 4 个关键源文件 md5 完全一致（translator / manager / codex-chat / codex-sse）。2026-06-22 本机稳定分支已推进到 `codex/ccpa-stabilization`；50.9 live 仍运行 `/Users/wangyan/ccpa` dirty tree，最新候选已在独立 clean worktree 验证，切换 live 需单独确认。
 
 ## 0. 当前状态覆盖说明（2026-06-22）
 
@@ -13,14 +13,15 @@
 
 - `/v1/responses` 已支持 OpenAI 标准的 string `input`，会在 Codex/Claude 路径规范化成 user message；客户端不再需要自己包数组。
 - `/v1/embeddings` 仍未实现，但已不再返回 Express HTML；已鉴权请求返回 OpenAI-style JSON 404，`error.code=endpoint_not_implemented`。
-- `/health` 现在返回非敏感 runtime identity：`status`、`service`、`version`、`started_at`、`uptime_ms`。
+- `/health` 现在返回非敏感 runtime identity：`status`、`service`、`version`、`started_at`、`uptime_ms`；`npm run build` 生成 `dist/build-info.json` 后，还会带 `build.git_commit` 等构建元数据。
 - `/admin/accounts` 现在包含 `server` provider readiness 摘要，以及 `claude` / `codex` 两个 provider 状态；`accounts` 数组仍只表示 Claude OAuth 账号列表。
 - prompt cache usage 已进入 `/admin/usage`、`/admin/usage/recent` 和 `/monitor` 聚合展示。
 - `/tmp/ccpa.stdout.log`、`/tmp/ccpa.stderr.log`、`/tmp/ccpa-healthcheck.log` 已有 repo 管理的维护脚本和 healthcheck opt-in；本机 `/Users/wy/ccpa-healthcheck.sh` 与 50.9 `/Users/wangyan/ccpa-healthcheck.sh` 都已替换为仓库 wrapper。
 - cloaking billing build hash 已稳定为配置项/默认值，不再每次请求随机；`cch` 仍随 payload 变化。
 - rate-limit 默认关闭是自用内网部署的有意默认。若暴露到公网或多客户端环境，应在 `config.yaml` 显式开启。
-- 50.9 已在 2026-06-20 同步到新代码并重启；2026-06-22 已重新完成 CCPA Claude OAuth 登录。当前 50.9 strict canary 与 strict `npm run release:verify -- --require-provider-status ok` 均通过，provider readiness 为 `ok`：Claude 与 Codex 两个 provider 都可用；`/health` 返回 runtime identity，`/v1/models` 当前 13 个模型，外部 healthcheck wrapper 已安装并可在非登录 PATH 下直接运行。
+- 50.9 live 在 2026-06-22 已重新完成 CCPA Claude OAuth 登录，当前 strict canary provider readiness 为 `ok`：Claude 与 Codex 两个 provider 都可用；`/v1/models` 当前 13 个模型，外部 healthcheck wrapper 已安装并可在非登录 PATH 下直接运行。但 live tree 仍是 dirty `main`，不是最新 `codex/ccpa-stabilization` clean candidate。
 - canary/preflight/strict release gate 现在会在 provider degraded 时打印 `provider_hint`，例如 Claude 过期会直接提示 `node dist/index.js --config=... --login --manual`，而不是只给 generic degraded 错误。
+- canary 支持 `--require-build-commit <sha>`，可用 `/health.build.git_commit` 证明 live runtime 是否真的跑某个候选提交，避免只靠 dist mtime 判断。
 - 50.9 的 `codex.models` 已补齐 `gpt-image-2`，避免 Images API contract 在路由层先报 `unsupported_model`。
 - 依赖安全已完成 Phase 157 收敛：本机和 50.9 的 `npm audit --json` 均为 0 vulnerabilities；运行时代码已移除 `uuid` 依赖，改用 Node 内置 `crypto.randomUUID()`。
 - Phase 158 修复了过期 Claude token 的健康误报：过期 token 不再进入上游请求，Claude chat/responses/messages/count_tokens 会返回 OpenAI-style `account_token_expired`，`/admin/accounts` 会把该 provider 标为 unavailable。

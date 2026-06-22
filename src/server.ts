@@ -80,12 +80,46 @@ function readPackageVersion(): string {
 
 const PACKAGE_VERSION = readPackageVersion();
 
+function readRuntimeBuildInfo() {
+  const buildInfoPath = process.env.CCPA_BUILD_INFO_FILE || path.resolve(__dirname, "build-info.json");
+  if (!fs.existsSync(buildInfoPath)) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(buildInfoPath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const build: Record<string, unknown> = {};
+    if (typeof parsed.git_commit === "string" && parsed.git_commit.trim()) {
+      build.git_commit = parsed.git_commit.trim();
+    }
+    if (typeof parsed.git_branch === "string" && parsed.git_branch.trim()) {
+      build.git_branch = parsed.git_branch.trim();
+    }
+    if (typeof parsed.git_dirty === "boolean") {
+      build.git_dirty = parsed.git_dirty;
+    }
+    if (typeof parsed.built_at === "string" && parsed.built_at.trim()) {
+      build.built_at = parsed.built_at.trim();
+    }
+
+    return Object.keys(build).length > 0 ? build : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function runtimeIdentity() {
+  const build = readRuntimeBuildInfo();
   return {
     service: "auth2api",
     version: PACKAGE_VERSION,
     started_at: SERVER_STARTED_AT,
     uptime_ms: Math.max(0, Date.now() - SERVER_STARTED_AT_MS),
+    ...(build ? { build } : {}),
   };
 }
 
