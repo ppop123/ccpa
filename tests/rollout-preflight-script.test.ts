@@ -72,6 +72,7 @@ test("ccpa rollout preflight documents read-only behavior and rollout controls",
   assert.match(result.stdout, /ccpa-canary\.mjs/);
   assert.match(result.stdout, /ccpa-contract-check\.mjs/);
   assert.match(result.stdout, /--external-healthcheck/);
+  assert.match(result.stdout, /--require-build-commit/);
   assert.match(result.stdout, /launchctl kickstart/);
 });
 
@@ -217,6 +218,50 @@ test("ccpa rollout preflight passes when local files and canary are ready", asyn
   assert.match(result.stdout, /external healthcheck: ok/);
   assert.doesNotMatch(result.stdout, /external healthcheck does not appear to use repository canary\/healthcheck/);
   assert.doesNotMatch(result.stdout, /sk-secret1234567890/);
+});
+
+test("ccpa rollout preflight passes required build commit to canary", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-build-commit-"));
+  const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
+  const canary = path.join(tmpDir, "fake-canary.mjs");
+  const canaryArgs = path.join(tmpDir, "canary-args.log");
+
+  fs.writeFileSync(
+    canary,
+    [
+      "import fs from 'node:fs';",
+      `fs.writeFileSync(${JSON.stringify(canaryArgs)}, process.argv.slice(2).join(' '));`,
+      "console.log('health: ok');",
+      "process.exit(0);",
+      "",
+    ].join("\n")
+  );
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const result = await runPreflight([
+    "--url",
+    "http://127.0.0.1:8317",
+    "--config",
+    config,
+    "--dist",
+    dist,
+    "--canary-script",
+    canary,
+    "--contract-script",
+    contract,
+    "--repo-healthcheck",
+    repoHealthcheck,
+    "--log-maintenance",
+    logMaintenance,
+    "--require-build-commit",
+    "abc1234",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(fs.readFileSync(canaryArgs, "utf8"), /--require-build-commit abc1234/);
 });
 
 test("ccpa rollout preflight defaults operator paths from the current user", async (t) => {

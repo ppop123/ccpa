@@ -39,6 +39,7 @@ function parseArgs(argv) {
     externalHealthcheck: process.env.CCPA_EXTERNAL_HEALTHCHECK || defaultExternalHealthcheck(),
     launchdLabel: process.env.CCPA_LAUNCHD_LABEL || defaultLaunchdLabel(),
     requireProviderStatus: process.env.CCPA_CANARY_REQUIRE_PROVIDER_STATUS || "degraded",
+    requireBuildCommit: process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT || "",
     timeoutMs: Number(process.env.CCPA_CANARY_TIMEOUT_MS || 5000),
   };
 
@@ -61,6 +62,7 @@ function parseArgs(argv) {
     else if (arg === "--external-healthcheck") args.externalHealthcheck = next();
     else if (arg === "--launchd-label") args.launchdLabel = next();
     else if (arg === "--require-provider-status") args.requireProviderStatus = next();
+    else if (arg === "--require-build-commit") args.requireBuildCommit = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -96,6 +98,7 @@ Options:
   --external-healthcheck path       Existing external healthcheck path
   --launchd-label label             launchctl label to print in next steps
   --require-provider-status value   any|degraded|ok for the canary
+  --require-build-commit commit     Require /health build.git_commit in canary
   --timeout-ms ms                   Canary timeout
 
 Environment mirrors the script options with CCPA_* variables where possible.`);
@@ -141,6 +144,9 @@ function runCanary(args) {
     "--timeout-ms",
     String(args.timeoutMs),
   ];
+  if (args.requireBuildCommit) {
+    canaryArgs.push("--require-build-commit", args.requireBuildCommit);
+  }
 
   return new Promise((resolve) => {
     execFile(process.execPath, canaryArgs, { timeout: args.timeoutMs + 5000 }, (error, stdout, stderr) => {
@@ -189,7 +195,8 @@ function printNextSteps(args) {
   console.log("next_steps:");
   console.log("  - npm run build");
   console.log(`  - launchctl kickstart -k ${args.launchdLabel}`);
-  console.log(`  - npm run canary -- --url ${args.url}`);
+  const buildCommitArg = args.requireBuildCommit ? ` --require-build-commit ${args.requireBuildCommit}` : "";
+  console.log(`  - npm run canary -- --url ${args.url}${buildCommitArg}`);
   console.log(`  - npm run contract:check -- --url ${args.url}`);
   console.log("  - CCPA_HEALTHCHECK_MAINTAIN_LOGS=true npm run healthcheck -- --no-restart");
   console.log(`  - review external healthcheck: ${args.externalHealthcheck}`);

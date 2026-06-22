@@ -44,6 +44,9 @@ Options:
   --require-provider-status any|degraded|ok
                        Optional provider readiness requirement passed to
                        rollout:preflight. Use ok for full Claude+Codex checks.
+  --require-build-commit COMMIT
+                       Optional runtime build.git_commit requirement passed to
+                       rollout:preflight/canary.
   --timeout-ms MS      Timeout per command, default 120000
   --help, -h           Show this help`);
 }
@@ -56,6 +59,10 @@ function parseArgs(argv) {
     nodeBin: process.execPath,
     bashBin: "bash",
     requireProviderStatus: process.env.CCPA_RELEASE_VERIFY_REQUIRE_PROVIDER_STATUS || "",
+    requireBuildCommit:
+      process.env.CCPA_RELEASE_VERIFY_REQUIRE_BUILD_COMMIT ||
+      process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT ||
+      "",
     timeoutMs: Number(process.env.CCPA_RELEASE_VERIFY_TIMEOUT_MS || 120000),
   };
 
@@ -74,6 +81,7 @@ function parseArgs(argv) {
     else if (arg === "--node-bin") args.nodeBin = next();
     else if (arg === "--bash-bin") args.bashBin = next();
     else if (arg === "--require-provider-status") args.requireProviderStatus = next();
+    else if (arg === "--require-build-commit") args.requireBuildCommit = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -177,8 +185,15 @@ function buildSteps(args) {
   const nodeCheckScripts = discoverScripts(args.repoDir, ".mjs");
   const bashCheckScripts = discoverScripts(args.repoDir, ".sh");
   const preflightArgs = ["run", "rollout:preflight"];
+  const preflightOptions = [];
   if (args.requireProviderStatus) {
-    preflightArgs.push("--", "--require-provider-status", args.requireProviderStatus);
+    preflightOptions.push("--require-provider-status", args.requireProviderStatus);
+  }
+  if (args.requireBuildCommit) {
+    preflightOptions.push("--require-build-commit", args.requireBuildCommit);
+  }
+  if (preflightOptions.length > 0) {
+    preflightArgs.push("--", ...preflightOptions);
   }
   const scriptSyntaxCommands = [
     ...nodeCheckScripts.map((scriptPath) => ({
@@ -254,6 +269,9 @@ async function main() {
   console.log(`repo: ${args.repoDir}`);
   if (args.requireProviderStatus) {
     console.log(`provider_status_required: ${args.requireProviderStatus}`);
+  }
+  if (args.requireBuildCommit) {
+    console.log(`build_commit_required: ${args.requireBuildCommit}`);
   }
 
   for (const step of buildSteps(args)) {

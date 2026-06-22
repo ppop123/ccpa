@@ -83,6 +83,7 @@ test("ccpa live rollout documents dry-run default and explicit apply controls", 
   assert.match(result.stdout, /launchctl kickstart/);
   assert.match(result.stdout, /npm run contract:check/);
   assert.match(result.stdout, /--canary-retries/);
+  assert.match(result.stdout, /--require-build-commit/);
 });
 
 test("ccpa live rollout dry-run does not execute commands or modify external healthcheck", async (t) => {
@@ -146,6 +147,37 @@ test("ccpa live rollout apply runs fake rollout commands without replacing exter
   assert.match(calls, /npm:run contract:check -- --url http:\/\/127\.0\.0\.1:8317/);
   assert.match(calls, /npm:run healthcheck -- --no-restart/);
   assert.match(fs.readFileSync(externalHealthcheck, "utf8"), /echo old/);
+});
+
+test("ccpa live rollout can require the post-rollout build commit", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-build-commit-"));
+  const { repoDir, logPath, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
+  const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
+  fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old\n");
+
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const result = await runRollout([
+    "--apply",
+    "--repo-dir",
+    repoDir,
+    "--npm-bin",
+    npmBin,
+    "--launchctl-bin",
+    launchctlBin,
+    "--external-healthcheck",
+    externalHealthcheck,
+    "--url",
+    "http://127.0.0.1:8317",
+    "--require-build-commit",
+    "abc1234",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(
+    fs.readFileSync(logPath, "utf8"),
+    /npm:run canary -- --url http:\/\/127\.0\.0\.1:8317 --require-build-commit abc1234/
+  );
 });
 
 test("ccpa live rollout defaults launchd label and external healthcheck to current operator", async (t) => {

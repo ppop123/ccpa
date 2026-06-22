@@ -34,6 +34,7 @@ function parseArgs(argv) {
     url: process.env.CCPA_BASE_URL || "http://127.0.0.1:8317",
     launchdLabel: process.env.CCPA_LAUNCHD_LABEL || defaultLaunchdLabel(),
     externalHealthcheck: process.env.CCPA_EXTERNAL_HEALTHCHECK || defaultExternalHealthcheck(),
+    requireBuildCommit: process.env.CCPA_CANARY_REQUIRE_BUILD_COMMIT || "",
     canaryRetries: Number(process.env.CCPA_LIVE_ROLLOUT_CANARY_RETRIES || 6),
     canaryRetryDelayMs: Number(process.env.CCPA_LIVE_ROLLOUT_CANARY_RETRY_DELAY_MS || 1000),
   };
@@ -55,6 +56,7 @@ function parseArgs(argv) {
     else if (arg === "--url") args.url = next();
     else if (arg === "--launchd-label") args.launchdLabel = next();
     else if (arg === "--external-healthcheck") args.externalHealthcheck = next();
+    else if (arg === "--require-build-commit") args.requireBuildCommit = next();
     else if (arg === "--canary-retries") args.canaryRetries = Number(next());
     else if (arg === "--canary-retry-delay-ms") args.canaryRetryDelayMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
@@ -91,13 +93,14 @@ Options:
   --url URL                         CCPA base URL for post-rollout canary
   --launchd-label LABEL             launchctl kickstart label
   --external-healthcheck PATH       Existing external healthcheck path
+  --require-build-commit COMMIT     Require post-rollout /health build.git_commit
   --canary-retries N                Post-kickstart canary attempts, default 6
   --canary-retry-delay-ms MS        Delay between canary attempts, default 1000
 
 Dry-run prints commands such as:
   npm run build
   launchctl kickstart -k <label>
-  npm run canary -- --url <url>
+  npm run canary -- --url <url> [--require-build-commit <commit>]
   npm run contract:check -- --url <url>`);
 }
 
@@ -191,11 +194,16 @@ async function main() {
   console.log("ccpa live rollout");
   console.log(`mode: ${args.apply ? "apply" : "dry-run"}`);
 
+  const canaryArgs = ["run", "canary", "--", "--url", args.url];
+  if (args.requireBuildCommit) {
+    canaryArgs.push("--require-build-commit", args.requireBuildCommit);
+  }
+
   await run(args.npmBin, ["run", "build"], options);
   await run(args.launchctlBin, ["kickstart", "-k", args.launchdLabel], options);
   await runWithRetries(
     args.npmBin,
-    ["run", "canary", "--", "--url", args.url],
+    canaryArgs,
     options,
     args.canaryRetries,
     args.canaryRetryDelayMs
