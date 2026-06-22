@@ -12,7 +12,7 @@ Claude + Codex Proxy API
 - 用一个本地 `base_url` 同时接 Claude 和 Codex
 - 按 `model` 自动路由
 
-它不是多账号池，不是计费平台，也不是通用网关。
+它有简单的 Claude 备用账号池，但不是计费平台、多租户服务，也不是通用网关。
 
 仓库名是 `ccpa`，但运行时日志和部分配置路径里仍然会看到旧的内部名字 `auth2api`。
 

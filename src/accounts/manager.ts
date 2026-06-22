@@ -96,7 +96,7 @@ export type AccountAvailability =
   | { state: "cooldown"; email: string; cooldownUntil: number; lastError: string | null };
 
 export class AccountManager {
-  private account: AccountState | null = null;
+  private accounts: AccountState[] = [];
   private authDir: string;
   private refreshTimer: NodeJS.Timeout | null = null;
   private refreshing = false;
@@ -107,42 +107,33 @@ export class AccountManager {
 
   load(): void {
     const tokens = loadAllTokens(this.authDir);
-    if (tokens.length > 1) {
-      throw new Error(
-        `Single-account mode only supports one token in ${this.authDir}; found ${tokens.length}.`
-      );
-    }
-
     const persisted = this.loadPersistedStates();
-    this.account = tokens[0] ? this.createAccountState(tokens[0]) : null;
-    if (this.account) {
-      this.applyPersistedState(this.account, persisted[this.account.token.email]);
-    }
-    console.log(`Loaded ${this.account ? 1 : 0} account(s)`);
+    this.accounts = tokens.map((token) => {
+      const account = this.createAccountState(token);
+      this.applyPersistedState(account, persisted[account.token.email]);
+      return account;
+    });
+    console.log(`Loaded ${this.accounts.length} account(s)`);
   }
 
   addAccount(token: TokenData): void {
-    if (this.account && this.account.token.email !== token.email) {
-      throw new Error(
-        `Single-account mode already has ${redactForLog(this.account.token.email)}. ` +
-          `Remove the existing token before logging into ${redactForLog(token.email)}.`
-      );
-    }
+    const existing = this.getAccountByEmail(token.email);
 
-    if (this.account) {
-      this.account.token = token;
-      this.account.cooldownUntil = 0;
-      this.account.failureCount = 0;
-      this.account.lastError = null;
-      this.account.lastFailureAt = null;
-      this.account.lastSuccessAt = new Date().toISOString();
-      this.account.lastRefreshAt = new Date().toISOString();
-      this.account.refreshFailureCount = 0;
-      this.account.nextRefreshAttemptAt = 0;
+    if (existing) {
+      existing.token = token;
+      existing.cooldownUntil = 0;
+      existing.failureCount = 0;
+      existing.lastError = null;
+      existing.lastFailureAt = null;
+      existing.lastSuccessAt = new Date().toISOString();
+      existing.lastRefreshAt = new Date().toISOString();
+      existing.refreshFailureCount = 0;
+      existing.nextRefreshAttemptAt = 0;
     } else {
-      this.account = this.createAccountState(token);
-      this.account.lastSuccessAt = new Date().toISOString();
-      this.account.lastRefreshAt = new Date().toISOString();
+      const account = this.createAccountState(token);
+      account.lastSuccessAt = new Date().toISOString();
+      account.lastRefreshAt = new Date().toISOString();
+      this.accounts.push(account);
     }
 
     saveToken(this.authDir, token);
@@ -150,35 +141,42 @@ export class AccountManager {
   }
 
   getNextAccount(): TokenData | null {
-    if (!this.account) return null;
-    return isAccountUsable(this.account) ? this.account.token : null;
+    return this.accounts.find((account) => isAccountUsable(account))?.token ?? null;
   }
 
   getAvailability(): AccountAvailability {
-    if (!this.account) {
+    if (this.accounts.length === 0) {
       return { state: "missing" };
     }
 
-    if (isTokenExpired(this.account.token)) {
-      return {
-        state: "expired",
-        email: this.account.token.email,
-        expiresAt: this.account.token.expiresAt,
-        refreshFailureCount: this.account.refreshFailureCount,
-        nextRefreshAttemptAt: this.account.nextRefreshAttemptAt,
-      };
+    const available = this.accounts.find((account) => isAccountUsable(account));
+    if (available) {
+      return { state: "available", email: available.token.email };
     }
 
-    if (this.account.cooldownUntil > Date.now()) {
+    const now = Date.now();
+    const cooldown = this.accounts.find((account) => account.cooldownUntil > now && !isTokenExpired(account.token, now));
+    if (cooldown) {
       return {
         state: "cooldown",
-        email: this.account.token.email,
-        cooldownUntil: this.account.cooldownUntil,
-        lastError: this.account.lastError,
+        email: cooldown.token.email,
+        cooldownUntil: cooldown.cooldownUntil,
+        lastError: cooldown.lastError,
       };
     }
 
-    return { state: "available", email: this.account.token.email };
+    const expired = this.accounts.find((account) => isTokenExpired(account.token, now)) ?? this.accounts[0];
+    if (isTokenExpired(expired.token, now)) {
+      return {
+        state: "expired",
+        email: expired.token.email,
+        expiresAt: expired.token.expiresAt,
+        refreshFailureCount: expired.refreshFailureCount,
+        nextRefreshAttemptAt: expired.nextRefreshAttemptAt,
+      };
+    }
+
+    return { state: "missing" };
   }
 
   recordAttempt(email: string): void {
@@ -232,25 +230,23 @@ export class AccountManager {
   }
 
   getSnapshots(): AccountSnapshot[] {
-    if (!this.account) return [];
-
-    return [{
-      email: this.account.token.email,
-      available: isAccountUsable(this.account),
-      cooldownUntil: this.account.cooldownUntil,
-      failureCount: this.account.failureCount,
-      lastError: this.account.lastError,
-      lastFailureAt: this.account.lastFailureAt,
-      lastSuccessAt: this.account.lastSuccessAt,
-      lastRefreshAt: this.account.lastRefreshAt,
-      totalRequests: this.account.totalRequests,
-      totalSuccesses: this.account.totalSuccesses,
-      totalFailures: this.account.totalFailures,
-      expiresAt: this.account.token.expiresAt,
-      refreshing: this.account.refreshing,
-      refreshFailureCount: this.account.refreshFailureCount,
-      nextRefreshAttemptAt: this.account.nextRefreshAttemptAt,
-    }];
+    return this.accounts.map((account) => ({
+      email: account.token.email,
+      available: isAccountUsable(account),
+      cooldownUntil: account.cooldownUntil,
+      failureCount: account.failureCount,
+      lastError: account.lastError,
+      lastFailureAt: account.lastFailureAt,
+      lastSuccessAt: account.lastSuccessAt,
+      lastRefreshAt: account.lastRefreshAt,
+      totalRequests: account.totalRequests,
+      totalSuccesses: account.totalSuccesses,
+      totalFailures: account.totalFailures,
+      expiresAt: account.token.expiresAt,
+      refreshing: account.refreshing,
+      refreshFailureCount: account.refreshFailureCount,
+      nextRefreshAttemptAt: account.nextRefreshAttemptAt,
+    }));
   }
 
   startAutoRefresh(): void {
@@ -271,24 +267,24 @@ export class AccountManager {
   }
 
   get accountCount(): number {
-    return this.account ? 1 : 0;
+    return this.accounts.length;
   }
 
   private async refreshAll(): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
     try {
-      if (!this.account) return;
+      for (const account of this.accounts) {
+        const expiresAt = new Date(account.token.expiresAt).getTime();
+        if (expiresAt - Date.now() > REFRESH_LEAD_MS) continue;
 
-      const expiresAt = new Date(this.account.token.expiresAt).getTime();
-      if (expiresAt - Date.now() > REFRESH_LEAD_MS) return;
+        // Respect refresh-failure backoff: if the last few refresh attempts
+        // all failed, don't keep slamming Anthropic's oauth endpoint every
+        // 60s — they may already be IP-rate-limiting us.
+        if (Date.now() < account.nextRefreshAttemptAt) continue;
 
-      // Respect refresh-failure backoff: if the last few refresh attempts
-      // all failed, don't keep slamming Anthropic's oauth endpoint every
-      // 60s — they may already be IP-rate-limiting us.
-      if (Date.now() < this.account.nextRefreshAttemptAt) return;
-
-      await this.refreshAccount(this.account.token.email);
+        await this.refreshAccount(account.token.email);
+      }
     } finally {
       this.refreshing = false;
     }
@@ -339,8 +335,7 @@ export class AccountManager {
   }
 
   private getAccountByEmail(email: string): AccountState | null {
-    if (!this.account || this.account.token.email !== email) return null;
-    return this.account;
+    return this.accounts.find((account) => account.token.email === email) ?? null;
   }
 
   private get stateFilePath(): string {
@@ -393,26 +388,28 @@ export class AccountManager {
   }
 
   private persistState(): void {
-    if (!this.account) return;
+    if (this.accounts.length === 0) return;
 
-    const acct = this.account;
     const stateFile: PersistedAccountStateFile = {
       version: 1,
-      accounts: {
-        [acct.token.email]: {
-          cooldownUntil: acct.cooldownUntil,
-          failureCount: acct.failureCount,
-          lastError: acct.lastError,
-          lastFailureAt: acct.lastFailureAt,
-          lastSuccessAt: acct.lastSuccessAt,
-          lastRefreshAt: acct.lastRefreshAt,
-          totalRequests: acct.totalRequests,
-          totalSuccesses: acct.totalSuccesses,
-          totalFailures: acct.totalFailures,
-          refreshFailureCount: acct.refreshFailureCount,
-          nextRefreshAttemptAt: acct.nextRefreshAttemptAt,
-        },
-      },
+      accounts: Object.fromEntries(
+        this.accounts.map((acct) => [
+          acct.token.email,
+          {
+            cooldownUntil: acct.cooldownUntil,
+            failureCount: acct.failureCount,
+            lastError: acct.lastError,
+            lastFailureAt: acct.lastFailureAt,
+            lastSuccessAt: acct.lastSuccessAt,
+            lastRefreshAt: acct.lastRefreshAt,
+            totalRequests: acct.totalRequests,
+            totalSuccesses: acct.totalSuccesses,
+            totalFailures: acct.totalFailures,
+            refreshFailureCount: acct.refreshFailureCount,
+            nextRefreshAttemptAt: acct.nextRefreshAttemptAt,
+          },
+        ])
+      ),
     };
 
     try {

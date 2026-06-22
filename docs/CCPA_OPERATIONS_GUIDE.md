@@ -123,7 +123,7 @@ ClaudeProvider.handleChatCompletions  providers/claude.ts:32
    │
    ├─ openaiToClaude(body)             translator.ts (OpenAI body → Anthropic shape)
    ├─ applyCloaking(claudeBody, ...)   cloaking.ts (billingHeader / agentBlock / cache_control)
-   ├─ manager.getNextAccount()         accounts/manager.ts (单账户，带 cooldown / backoff)
+   ├─ manager.getNextAccount()         accounts/manager.ts (Claude account pool，带 cooldown / backoff)
    ▼
 callClaudeAPI(token, body, stream)    proxy/claude-api.ts:53
    │  POST https://api.anthropic.com/v1/messages?beta=true
@@ -189,7 +189,7 @@ src/
 │   └─ types.ts
 │
 ├─ accounts/
-│   └─ manager.ts      单账户 state + cooldown + refresh backoff (301 行)
+│   └─ manager.ts      Claude account pool state + cooldown + refresh backoff
 │
 └─ monitoring/         dashboard + usage 聚合
     ├─ dashboard-page.ts  /monitor HTML (810 行)
@@ -202,8 +202,8 @@ src/
 **Router 用前缀字符串而非 capabilities/registry**
 `router.ts:3-4` 三行常量 `CLAUDE_PREFIXES = ["claude-"]` / `CODEX_PREFIXES = ["gpt-", "codex-"]` 加一条 `/^o\d/` 正则就完事。代价是加新厂商要改代码，收益是新 model 出来（claude-opus-4-9 / gpt-5.6）零改动自动路由，业务方在 model 字段写啥都行。alias `opus`/`sonnet`/`haiku` 走 `ClaudeProvider.supportsModel` 兜底（server.ts:118）。
 
-**单账户而非账户池**
-`accounts/manager.ts:65` 只持有单个 `AccountState`，认证 dir 多 token 文件会 throw（P1 issue）。订阅模式下账户池=封号风险倍增，并发跑 3 个 token 也只能复用一个浏览器 session 的 cookie，所以接受单点限速。冷却走 cooldown timer + retry-after 退避；refresh 失败有指数 backoff 60s→30min（2026-06-09 加的，避免 401 风暴打爆 OAuth endpoint）。
+**简单账号池，不做并发放大**
+`accounts/manager.ts` 会加载 `auth-dir` 下多个 `claude-*.json` token，按稳定文件名顺序选择第一个可用账号；过期或 cooldown 中的账号会被跳过。它不是加权调度或并发放大器，重点是避免旧 token 文件让服务启动失败，并为手工备用账号提供平滑切换。冷却走 cooldown timer + retry-after 退避；refresh 失败有指数 backoff 60s→30min，避免 401 风暴打爆 OAuth endpoint。
 
 **Cloaking 是必需层不是可选**
 `proxy/cloaking.ts` 注入 billingHeader / agentBlock / `cache_control: ephemeral` 让上游看起来像 Claude Code CLI 在跑，否则 Anthropic 会基于 user-agent + body shape 识别非官方客户端。`claude-api.ts:22-50` 配合伪 Stainless headers (`X-Stainless-Runtime=node`, `User-Agent=claude-cli/2.1.63`)。这层关掉立即 401/403。
@@ -914,8 +914,8 @@ httpx.post(f"{BASE}/v1/chat/completions",
 |---|---|---|---|
 | 401 `{"error":{"message":"Missing API key"}}` | Authorization header 缺 | 忘了带 Bearer | 加 header |
 | 403 `Invalid API key` | api-key 不在 `config.yaml api-keys[]` | 改错 key 或换机后没同步 | 比对 `~/auth2api/config.yaml` |
-| 429 | 单账户 quota 真挂 / token 过期 | 单账户硬约束（manager.ts:67）+ Anthropic 限流 | 等冷却或换 oauth；业务侧 fallback thu |
-| 503 / `account cooldown` | 唯一账户进 cooldown 队列 | 同上 | 等 backoff（manager.ts REFRESH_FAIL_BASE_MS 60s→30min）|
+| 429 | 当前可选 Claude 账号都在 cooldown | Anthropic 限流或请求失败触发账号级 backoff | 等冷却、换 oauth，或让业务侧 fallback |
+| 503 / `account_token_expired` | 所有 Claude token 过期且 refresh 不可用 | refresh_token 失效或 OAuth 刷新 backoff | 重新 `--login`，或等 refresh backoff 后自动重试 |
 | 500 `fetch failed` | ProxyAgent 没启动 | LaunchAgent plist 里 `HTTPS_PROXY` 没设 / Surge 没在 6152 | 检 `~/Library/LaunchAgents/com.wy.ccpa.plist` |
 | stream 永远不返回 | 没设 read timeout | httpx 默认无超时 + 上游 socket 死 | 必须 `httpx.Timeout(read=120.0)` |
 | 404 JSON `endpoint_not_implemented` | embedding 端点未实现 | CCPA 不提供 embedding provider | 业务侧别调 ccpa 做 embedding，用 volcano/openai 直连 |
@@ -1303,12 +1303,10 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 
 ### P1 — 设计层硬约束，影响场景小但应改
 
-#### 1. 单账户硬约束 throw
-- **现状**：`auth-dir` 里放第二个 token 文件直接抛错，进程起不来。多账户轮转、备用账户、热切换全部不可能。
-- **位置**：`src/accounts/manager.ts:76-80`（`if (tokens.length > 1) throw new Error(...)`），`src/accounts/manager.ts:86-91` 同样在 `addAccount` 处把第二个 email 直接拒掉。
-- **修法**：把 `AccountManager.account: AccountState | null` 改成 `accounts: Map<string, AccountState>`，引入 round-robin 或 weight；`getAvailableAccount()` 返回 cooldown 已过的第一个。要同步改 `src/providers/claude.ts:58-78` 的 status 渲染、`src/monitoring/dashboard-page.ts` 的多账号面板。
-- **工时**：半天（含改 dashboard、admin endpoint）
-- **阻塞业务**：否。当前 1 个 OAuth 已够老登、老外、podcast、菲姐四条线轮训。
+#### 1. 单账户硬约束 throw — closed
+- **2026-06-22 状态**：`AccountManager` 已从单个 `AccountState | null` 改为 `AccountState[]`。`auth-dir` 下多个 `claude-*.json` token 会被稳定加载，`getNextAccount()` 返回第一个可用账号；过期或 cooldown 中的账号会被跳过。
+- **边界**：这只是自用备用账号池，不是加权轮询、额度聚合或并发放大。Codex 仍按 `codex.auth-file` 使用单个 auth file。
+- **验证**：`tests/account-manager-state.test.ts` 覆盖多 token 加载、可用账号选择和 state 不写入 token；`tests/smoke.test.ts` 覆盖 `/admin/accounts` 多 snapshot 暴露。`npm run release:verify -- --require-provider-status ok` 已通过。
 
 #### 2. CLAUDE_MODELS hardcode — closed
 - **2026-06-19 状态**：Claude 模型列表已进入 `config.yaml` / `config.example.yaml` 的 `claude.models[]` 配置，并保留默认模型集。新增/调整 alias 不再需要改 provider 源码。
@@ -1363,9 +1361,8 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 
 1. **发布整理与 review handoff** — 当前候选集已经较大，先用 `npm run release:readiness -- --list` 固化范围，并用 `npm run release:readiness -- --write-json /tmp/ccpa-release-readiness.json` 留一份机器可读 handoff manifest，再让 Claude/Codex review 一轮，避免长期脏树继续扩大。
 2. **真上游矩阵验收** — 默认只跑 `npm run upstream:matrix` dry-run；需要花额度确认时，再显式执行 `npm run upstream:matrix -- --apply`，图片另加 `--include-image`。
-3. **多账户支持** — 仍是最大的结构性 open item；在已有 state persistence 基础上把 Claude account pool 从单账户扩到多账户。
-4. **发布归档 / commit / PR** — 本机与 50.9 已能过 no-upstream release gates，下一步要把当前候选集变成可 review、可回滚的一组提交或 PR。
-5. **可选新能力** — embeddings、batch、audio、realtime 都属于新产品面，不再混在稳定性修复清单里。
+3. **发布归档 / commit / PR** — 本机与 50.9 已能过 no-upstream release gates，下一步要把当前候选集变成可 review、可回滚的一组提交或 PR。
+4. **可选新能力** — embeddings、batch、audio、realtime 都属于新产品面，不再混在稳定性修复清单里。
 
 P4 的 nice-to-have 等真有业务需求再启动，不要无脑提前写。
 

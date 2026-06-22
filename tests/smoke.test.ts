@@ -10482,7 +10482,7 @@ test("Codex models not listed in config are rejected", async (t) => {
   assert.equal(resp.body.error.code, "unsupported_model");
 });
 
-test("rejects loading multiple accounts in single-account mode", (t) => {
+test("loads multiple Claude accounts and exposes each snapshot", (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
   t.after(() => {
     fs.rmSync(authDir, { recursive: true, force: true });
@@ -10492,8 +10492,11 @@ test("rejects loading multiple accounts in single-account mode", (t) => {
   saveToken(authDir, makeToken({ email: "second@example.com", accessToken: "second-access" }));
 
   const manager = new AccountManager(authDir);
-  assert.throws(
-    () => manager.load(),
-    /Single-account mode only supports one token/
+  manager.load();
+
+  assert.equal(manager.accountCount, 2);
+  assert.deepEqual(
+    manager.getSnapshots().map((account) => account.email),
+    ["first@example.com", "second@example.com"]
   );
 });

@@ -33,7 +33,10 @@ export function saveToken(authDir: string, data: TokenData): void {
 
 export function loadAllTokens(authDir: string): TokenData[] {
   if (!fs.existsSync(authDir)) return [];
-  const files = fs.readdirSync(authDir).filter((f) => f.startsWith("claude-") && f.endsWith(".json"));
+  const files = fs
+    .readdirSync(authDir)
+    .filter((f) => f.startsWith("claude-") && f.endsWith(".json"))
+    .sort();
   const tokens: TokenData[] = [];
   for (const file of files) {
     try {
