@@ -8744,9 +8744,79 @@ test("returns rate limited when the configured account is cooled down", async (t
   });
 
   assert.equal(resp.status, 429);
+  assert.match(String(resp.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(resp.headers["retry-after"]) >= 1);
+  assert.ok(Number(resp.headers["retry-after"]) <= 60);
   assert.equal(resp.body.error.message, "Rate limited on the configured account");
   assert.equal(resp.body.error.type, "rate_limit_error");
   assert.equal(resp.body.error.code, "account_rate_limited");
+});
+
+test("Claude exhausted upstream 429 responses include Retry-After", async (t) => {
+  const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-upstream-429-"));
+  const countAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-count-upstream-429-"));
+  const makePool = (prefix: string) => [
+    makeToken({ email: `${prefix}-one@example.com`, accessToken: `${prefix}-one-access` }),
+    makeToken({ email: `${prefix}-two@example.com`, accessToken: `${prefix}-two-access` }),
+    makeToken({ email: `${prefix}-three@example.com`, accessToken: `${prefix}-three-access` }),
+  ];
+  const chatManager = makeManager(chatAuthDir, makePool("chat"));
+  const countManager = makeManager(countAuthDir, makePool("count"));
+  const restoreFetch = withMockedFetch(async (input) => {
+    const url = String(input);
+    if (url.includes("anthropic.com/v1/messages")) {
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    throw new Error(`Unexpected fetch to ${url}`);
+  });
+  const chatServer = await startApp(makeConfig(chatAuthDir), chatManager);
+  const countServer = await startApp(makeConfig(countAuthDir), countManager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(chatServer);
+    await stopApp(countServer);
+    fs.rmSync(chatAuthDir, { recursive: true, force: true });
+    fs.rmSync(countAuthDir, { recursive: true, force: true });
+  });
+
+  const chat = await requestJson({
+    server: chatServer,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "hello" }],
+    },
+  });
+
+  assert.equal(chat.status, 429);
+  assert.match(String(chat.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(chat.headers["retry-after"]) >= 1);
+  assert.ok(Number(chat.headers["retry-after"]) <= 60);
+  assert.equal(chat.body.error.code, "account_rate_limited");
+
+  const count = await requestJson({
+    server: countServer,
+    method: "POST",
+    path: "/v1/messages/count_tokens",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "hello" }],
+    },
+  });
+
+  assert.equal(count.status, 429);
+  assert.match(String(count.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(count.headers["retry-after"]) >= 1);
+  assert.ok(Number(count.headers["retry-after"]) <= 60);
+  assert.equal(count.body.error.code, "account_rate_limited");
 });
 
 test("Claude proxy missing account errors return OpenAI-style JSON", async (t) => {
@@ -8976,6 +9046,9 @@ test("Claude native passthrough errors return OpenAI-style JSON", async (t) => {
   });
 
   assert.equal(cooldownCount.status, 429);
+  assert.match(String(cooldownCount.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(cooldownCount.headers["retry-after"]) >= 1);
+  assert.ok(Number(cooldownCount.headers["retry-after"]) <= 60);
   assert.equal(cooldownCount.body.error.message, "Rate limited on the configured account");
   assert.equal(cooldownCount.body.error.type, "rate_limit_error");
   assert.equal(cooldownCount.body.error.code, "account_rate_limited");

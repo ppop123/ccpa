@@ -7,7 +7,7 @@ import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI, callClaudeCountTokens } from "./claude-api";
 import { readClaudeJsonResponse } from "./upstream-json";
-import { sendUnavailableClaudeAccount } from "./account-availability";
+import { sendUnavailableClaudeAccount, setClaudeCooldownRetryAfter } from "./account-availability";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -685,6 +685,9 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
           : lastStatus === 403
             ? apiError(clientMsg, "upstream_forbidden")
             : apiError(clientMsg, "upstream_request_failed");
+      if (lastStatus === 429) {
+        setClaudeCooldownRetryAfter(res, manager.getAvailability());
+      }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
       console.error("Messages handler error:", err.message);
@@ -814,6 +817,9 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
           : lastStatus === 403
             ? apiError("Token counting failed", "upstream_forbidden")
             : apiError("Token counting failed", "upstream_request_failed");
+      if (lastStatus === 429) {
+        setClaudeCooldownRetryAfter(res, manager.getAvailability());
+      }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
       console.error("Count tokens error:", err.message);

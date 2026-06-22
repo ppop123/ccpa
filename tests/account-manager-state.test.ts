@@ -172,6 +172,53 @@ test("loads multiple token files and selects the first usable account", () => {
   }
 });
 
+test("reports the soonest account cooldown when no account is usable", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-cooldown-order-"));
+
+  try {
+    const slow = makeToken({
+      email: "aaa-slow@example.com",
+      accessToken: "slow-access",
+    });
+    const fast = makeToken({
+      email: "bbb-fast@example.com",
+      accessToken: "fast-access",
+    });
+    const slowCooldown = Date.now() + 120_000;
+    const fastCooldown = Date.now() + 30_000;
+    saveToken(authDir, slow);
+    saveToken(authDir, fast);
+    fs.writeFileSync(
+      path.join(authDir, "state.json"),
+      JSON.stringify({
+        version: 1,
+        accounts: {
+          [slow.email]: {
+            cooldownUntil: slowCooldown,
+            lastError: "rate_limit: slow",
+          },
+          [fast.email]: {
+            cooldownUntil: fastCooldown,
+            lastError: "rate_limit: fast",
+          },
+        },
+      })
+    );
+
+    const manager = loadManager(authDir);
+
+    assert.equal(manager.getNextAccount(), null);
+    assert.deepEqual(manager.getAvailability(), {
+      state: "cooldown",
+      email: fast.email,
+      cooldownUntil: fastCooldown,
+      lastError: "rate_limit: fast",
+    });
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});
+
 test("redacts account identifiers and API keys in runtime logs", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-log-redaction-"));
   const token = makeToken({

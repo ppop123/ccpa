@@ -4,6 +4,20 @@ import { AccountAvailability } from "../accounts/manager";
 import { apiError, rateLimitError } from "../errors/openai";
 import { setFailureContext } from "../monitoring/http-usage";
 
+function setRetryAfterFromEpochMs(res: ExpressResponse, retryAtMs: number): void {
+  const retryAfterSeconds = Math.max(1, Math.ceil((retryAtMs - Date.now()) / 1000));
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+}
+
+export function setClaudeCooldownRetryAfter(
+  res: ExpressResponse,
+  availability: AccountAvailability
+): void {
+  if (availability.state === "cooldown") {
+    setRetryAfterFromEpochMs(res, availability.cooldownUntil);
+  }
+}
+
 export function sendUnavailableClaudeAccount(
   res: ExpressResponse,
   availability: AccountAvailability
@@ -17,6 +31,7 @@ export function sendUnavailableClaudeAccount(
       accountLastError: availability.lastError,
       cooldownUntil: availability.cooldownUntil,
     });
+    setClaudeCooldownRetryAfter(res, availability);
     res.status(429).json(rateLimitError("Rate limited on the configured account", "account_rate_limited"));
     return;
   }

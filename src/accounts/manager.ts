@@ -155,7 +155,15 @@ export class AccountManager {
     }
 
     const now = Date.now();
-    const cooldown = this.accounts.find((account) => account.cooldownUntil > now && !isTokenExpired(account.token, now));
+    const cooldown = this.accounts.reduce<AccountState | null>((soonest, account) => {
+      if (account.cooldownUntil <= now || isTokenExpired(account.token, now)) {
+        return soonest;
+      }
+      if (!soonest || account.cooldownUntil < soonest.cooldownUntil) {
+        return account;
+      }
+      return soonest;
+    }, null);
     if (cooldown) {
       return {
         state: "cooldown",

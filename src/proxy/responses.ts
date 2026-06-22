@@ -9,7 +9,7 @@ import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
 import { resolveModel } from "./translator";
 import { readClaudeJsonResponse } from "./upstream-json";
-import { sendUnavailableClaudeAccount } from "./account-availability";
+import { sendUnavailableClaudeAccount, setClaudeCooldownRetryAfter } from "./account-availability";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -2181,6 +2181,9 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
           : lastStatus === 403
             ? apiError(clientMsg, "upstream_forbidden")
             : apiError(clientMsg, "upstream_request_failed");
+      if (lastStatus === 429) {
+        setClaudeCooldownRetryAfter(res, manager.getAvailability());
+      }
       res.status(lastStatus).json(errorBody);
     } catch (err: any) {
       console.error("Responses handler error:", err.message);
