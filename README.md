@@ -93,7 +93,7 @@ debug: "off"
 
 For the full config surface, see [config.example.yaml](/Users/wy/auth2api/config.example.yaml).
 
-Local `/v1` rate limiting is disabled by default. If you want it, set `rate-limit.enabled: true` and tune `window-ms` / `max-requests` in [config.example.yaml](/Users/wy/auth2api/config.example.yaml). When enabled, buckets are isolated by authenticated API key, so one local client key cannot consume another key's quota from the same IP. Local rate-limit 429s include `Retry-After` and `X-RateLimit-*`; Claude account cooldown 429s include `Retry-After`.
+Local `/v1` rate limiting is disabled by default. If you want it, set `rate-limit.enabled: true` and tune `window-ms` / `max-requests` in [config.example.yaml](/Users/wy/auth2api/config.example.yaml). When enabled, buckets are isolated by authenticated API key, so one local client key cannot consume another key's quota from the same IP. Local rate-limit 429s include `Retry-After` and `X-RateLimit-*`; Claude account cooldown 429s and refresh-backoff 503s include `Retry-After`.
 
 Start the server:
 

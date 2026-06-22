@@ -173,7 +173,17 @@ export class AccountManager {
       };
     }
 
-    const expired = this.accounts.find((account) => isTokenExpired(account.token, now)) ?? this.accounts[0];
+    const expired = this.accounts.reduce<AccountState | null>((soonest, account) => {
+      if (!isTokenExpired(account.token, now)) {
+        return soonest;
+      }
+      if (!soonest) {
+        return account;
+      }
+      const accountRetryAt = getExpiredRetryAt(account, now);
+      const soonestRetryAt = getExpiredRetryAt(soonest, now);
+      return accountRetryAt < soonestRetryAt ? account : soonest;
+    }, null) ?? this.accounts[0];
     if (isTokenExpired(expired.token, now)) {
       return {
         state: "expired",
@@ -455,6 +465,10 @@ function isAccountUsable(acct: AccountState, now = Date.now()): boolean {
 function isTokenExpired(token: TokenData, now = Date.now()): boolean {
   const expiresAt = Date.parse(token.expiresAt);
   return !Number.isFinite(expiresAt) || expiresAt <= now + TOKEN_EXPIRY_SKEW_MS;
+}
+
+function getExpiredRetryAt(acct: AccountState, now: number): number {
+  return acct.nextRefreshAttemptAt > now ? acct.nextRefreshAttemptAt : 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

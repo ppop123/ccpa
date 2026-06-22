@@ -219,6 +219,56 @@ test("reports the soonest account cooldown when no account is usable", () => {
   }
 });
 
+test("reports the soonest refresh backoff when all accounts are expired", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-refresh-backoff-order-"));
+
+  try {
+    const slow = makeToken({
+      email: "aaa-slow@example.com",
+      accessToken: "slow-access",
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const fast = makeToken({
+      email: "bbb-fast@example.com",
+      accessToken: "fast-access",
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const slowNextRefresh = Date.now() + 120_000;
+    const fastNextRefresh = Date.now() + 30_000;
+    saveToken(authDir, slow);
+    saveToken(authDir, fast);
+    fs.writeFileSync(
+      path.join(authDir, "state.json"),
+      JSON.stringify({
+        version: 1,
+        accounts: {
+          [slow.email]: {
+            refreshFailureCount: 2,
+            nextRefreshAttemptAt: slowNextRefresh,
+          },
+          [fast.email]: {
+            refreshFailureCount: 1,
+            nextRefreshAttemptAt: fastNextRefresh,
+          },
+        },
+      })
+    );
+
+    const manager = loadManager(authDir);
+
+    assert.equal(manager.getNextAccount(), null);
+    assert.deepEqual(manager.getAvailability(), {
+      state: "expired",
+      email: fast.email,
+      expiresAt: fast.expiresAt,
+      refreshFailureCount: 1,
+      nextRefreshAttemptAt: fastNextRefresh,
+    });
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+  }
+});
+
 test("redacts account identifiers and API keys in runtime logs", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-log-redaction-"));
   const token = makeToken({

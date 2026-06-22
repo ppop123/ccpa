@@ -432,7 +432,7 @@ curl -sS -X POST http://127.0.0.1:8317/v1/chat/completions \
   -d '{"model":"claude-haiku-4-5","messages":[{"role":"user","content":"say hi"}],"max_tokens":50}'
 ```
 
-**Gotcha**：3 次重试（`MAX_RETRIES=3`，`handler.ts:11`），429/500/502/503/504 会换账号或退避重试；401 会触发一次 `manager.refreshAccount`（`handler.ts:126-132`）。本地限流和 Claude 账号 cooldown 返回 429 时会带 `Retry-After`，业务侧应优先按该 header 退避。
+**Gotcha**：3 次重试（`MAX_RETRIES=3`，`handler.ts:11`），429/500/502/503/504 会换账号或退避重试；401 会触发一次 `manager.refreshAccount`（`handler.ts:126-132`）。本地限流和 Claude 账号 cooldown 返回 429 时会带 `Retry-After`；Claude token 已过期且 refresh 正在 backoff 时，503 `account_token_expired` 也会带 `Retry-After`。业务侧应优先按该 header 退避。
 
 ---
 
@@ -948,7 +948,7 @@ httpx.post(f"{BASE}/v1/chat/completions",
 | 401 `{"error":{"message":"Missing API key"}}` | Authorization header 缺 | 忘了带 Bearer | 加 header |
 | 403 `Invalid API key` | api-key 不在 `config.yaml api-keys[]` | 改错 key 或换机后没同步 | 比对 `~/auth2api/config.yaml` |
 | 429 | 当前可选 Claude 账号都在 cooldown，或本地 `/v1` rate-limit 触发 | Anthropic 限流/请求失败触发账号级 backoff，或客户端 key 超出本地窗口 | 优先按 `Retry-After` 退避；必要时换 oauth、调高本地限流或让业务侧 fallback |
-| 503 / `account_token_expired` | 所有 Claude token 过期且 refresh 不可用 | refresh_token 失效或 OAuth 刷新 backoff | 重新 `--login`，或等 refresh backoff 后自动重试 |
+| 503 / `account_token_expired` | 所有 Claude token 过期且 refresh 不可用 | refresh_token 失效或 OAuth 刷新 backoff | 若响应有 `Retry-After`，先按 header 等 refresh backoff；否则重新 `--login` |
 | 500 `fetch failed` | ProxyAgent 没启动 | LaunchAgent plist 里 `HTTPS_PROXY` 没设 / Surge 没在 6152 | 检 `~/Library/LaunchAgents/com.wy.ccpa.plist` |
 | stream 永远不返回 | 没设 read timeout | httpx 默认无超时 + 上游 socket 死 | 必须 `httpx.Timeout(read=120.0)` |
 | 404 JSON `endpoint_not_implemented` | embedding 端点未实现 | CCPA 不提供 embedding provider | 业务侧别调 ccpa 做 embedding，用 volcano/openai 直连 |
@@ -1364,7 +1364,7 @@ stat -f '%Sm %N' ~/auth2api/src/providers/codex-chat.ts ~/auth2api/src/providers
 
 #### 6. rate-limit 默认 disabled — intentional default
 - **2026-06-19 状态**：默认关闭仍保留，原因是当前部署定位为内网自用 + API key 限制，避免给个人自动化管线增加默认误伤。
-- **安全边界**：如果暴露到公网、多人共享或无法信任客户端，应在 `config.yaml` 显式开启 `rate-limit.enabled=true`，并设置每 key 的窗口/请求上限。Phase 192 起本地 `/v1` 限流按已鉴权 API key hash 分桶，避免同 IP 下某个 key 超限连带阻断其他 key；本地限流 429 返回 `Retry-After` 和 `X-RateLimit-*`，Claude 账号 cooldown 429 返回 `Retry-After`。
+- **安全边界**：如果暴露到公网、多人共享或无法信任客户端，应在 `config.yaml` 显式开启 `rate-limit.enabled=true`，并设置每 key 的窗口/请求上限。Phase 192 起本地 `/v1` 限流按已鉴权 API key hash 分桶，避免同 IP 下某个 key 超限连带阻断其他 key；本地限流 429 返回 `Retry-After` 和 `X-RateLimit-*`，Claude 账号 cooldown 429 返回 `Retry-After`，Claude refresh backoff 503 `account_token_expired` 也返回 `Retry-After`。
 
 #### 7. cloaking billingHeader build hash stability — closed
 - **2026-06-19 状态**：billing build hash 已变成稳定配置/默认值，避免每次请求生成新的 `cc_version` suffix。payload 相关的 `cch` 仍然按请求内容变化。

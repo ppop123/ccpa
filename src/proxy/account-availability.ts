@@ -37,7 +37,9 @@ export function sendUnavailableClaudeAccount(
   }
 
   if (availability.state === "expired") {
-    const message = availability.nextRefreshAttemptAt > Date.now()
+    const nextRefreshAttemptAt = availability.nextRefreshAttemptAt;
+    const isRefreshBackoffActive = nextRefreshAttemptAt > Date.now();
+    const message = isRefreshBackoffActive
       ? "Claude account token is expired; token refresh is backing off"
       : "Claude account token is expired; refresh or login required";
     setFailureContext(res, {
@@ -49,8 +51,11 @@ export function sendUnavailableClaudeAccount(
         availability.refreshFailureCount > 0
           ? `refresh failures: ${availability.refreshFailureCount}`
           : null,
-      cooldownUntil: availability.nextRefreshAttemptAt || null,
+      cooldownUntil: nextRefreshAttemptAt || null,
     });
+    if (isRefreshBackoffActive) {
+      setRetryAfterFromEpochMs(res, nextRefreshAttemptAt);
+    }
     res.status(503).json(apiError(message, "account_token_expired"));
     return;
   }

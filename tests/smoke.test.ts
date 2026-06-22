@@ -8914,6 +8914,75 @@ test("Claude proxy expired account errors return OpenAI-style JSON without upstr
   assert.equal(upstreamCalls, 0);
 });
 
+test("Claude proxy expired refresh backoff errors include Retry-After", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-refresh-backoff-"));
+  const token = makeToken({ expiresAt: new Date(Date.now() - 60_000).toISOString() });
+  const nextRefreshAttemptAt = Date.now() + 120_000;
+  saveToken(authDir, token);
+  fs.writeFileSync(
+    path.join(authDir, "state.json"),
+    JSON.stringify({
+      version: 1,
+      accounts: {
+        [token.email]: {
+          refreshFailureCount: 2,
+          nextRefreshAttemptAt,
+        },
+      },
+    })
+  );
+  const manager = new AccountManager(authDir);
+  manager.load();
+  let upstreamCalls = 0;
+  const restoreFetch = withMockedFetch(async () => {
+    upstreamCalls++;
+    return new Response("{}", { status: 200 });
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const chat = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "hello" }],
+    },
+  });
+
+  assert.equal(chat.status, 503);
+  assert.equal(chat.body.error.code, "account_token_expired");
+  assert.match(String(chat.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(chat.headers["retry-after"]) >= 1);
+  assert.ok(Number(chat.headers["retry-after"]) <= 120);
+
+  const responses = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/responses",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      input: "hello",
+    },
+  });
+
+  assert.equal(responses.status, 503);
+  assert.equal(responses.body.error.code, "account_token_expired");
+  assert.match(String(responses.headers["retry-after"] || ""), /^\d+$/);
+  assert.ok(Number(responses.headers["retry-after"]) >= 1);
+  assert.ok(Number(responses.headers["retry-after"]) <= 120);
+  assert.equal(upstreamCalls, 0);
+});
+
 test("Claude proxy upstream network errors return OpenAI-style JSON", async (t) => {
   const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-network-"));
   const responsesAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-network-"));
