@@ -59,6 +59,8 @@ const UNSUPPORTED_CLAUDE_TOOL_TYPES = new Set([
 const VALID_CUSTOM_TOOL_FORMAT_TYPES = new Set(["text", "grammar"]);
 const VALID_CUSTOM_TOOL_GRAMMAR_SYNTAX = new Set(["lark", "regex"]);
 const VALID_RESPONSES_TEXT_FORMAT_TYPES = new Set(["text", "json_object", "json_schema"]);
+const VALID_RESPONSES_TEXT_VERBOSITIES = new Set(["low", "medium", "high"]);
+const RESPONSES_TEXT_VERBOSITY_ERROR = "text.verbosity must be one of low, medium, high";
 const VALID_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
 const VALID_REASONING_SUMMARY_MODES = new Set(["auto", "concise", "detailed"]);
 const RESPONSES_REASONING_EFFORT_ERROR =
@@ -460,6 +462,11 @@ function getResponsesTextFormatError(text: unknown): string | undefined {
     return "text must be an object";
   }
 
+  const verbosity = text.verbosity;
+  if (verbosity !== undefined && (typeof verbosity !== "string" || !VALID_RESPONSES_TEXT_VERBOSITIES.has(verbosity))) {
+    return RESPONSES_TEXT_VERBOSITY_ERROR;
+  }
+
   const format = text.format;
   if (format === undefined) {
     return undefined;
@@ -496,6 +503,10 @@ function getResponsesTextFormatError(text: unknown): string | undefined {
 }
 
 function getClaudeResponsesUnsupportedTextFormatError(body: any): string | undefined {
+  if (body?.text?.verbosity !== undefined) {
+    return "text.verbosity is unsupported for Claude responses models";
+  }
+
   const format = body?.text?.format;
   if (!isObjectRecord(format)) {
     return undefined;

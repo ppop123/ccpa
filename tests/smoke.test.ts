@@ -1536,6 +1536,108 @@ test("Claude responses rejects unsupported text format before upstream", async (
   assert.equal(calls.length, 1);
 });
 
+test("OpenAI responses text verbosity must be valid before upstream", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-text-verbosity-"));
+  writeCodexAuth(authDir);
+  const manager = makeManager(authDir, [makeToken()]);
+  const calls: Array<{ url: string; body: any }> = [];
+  const restoreFetch = withMockedFetch(async (input, init) => {
+    const url = String(input);
+    calls.push({
+      url,
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
+    });
+
+    if (url.includes("anthropic.com")) {
+      return new Response(
+        JSON.stringify({
+          id: "msg_responses_text_verbosity",
+          content: [{ type: "text", text: "unexpected text verbosity upstream call" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return makeSseResponse([
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"resp_responses_text_verbosity\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":2}\n\n",
+    ]);
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const invalids = [
+    { model: "claude-sonnet-4-6", text: { verbosity: "quiet" } },
+    { model: "gpt-5.4", text: { verbosity: "quiet" } },
+    { model: "gpt-5.4", text: { verbosity: 1 } },
+  ];
+
+  for (const invalid of invalids) {
+    const resp = await requestJson({
+      server,
+      method: "POST",
+      path: "/v1/responses",
+      headers: { Authorization: "Bearer test-key" },
+      body: {
+        model: invalid.model,
+        input: "hello",
+        text: invalid.text,
+      },
+    });
+
+    assert.equal(resp.status, 400);
+    assert.equal(resp.body.error.message, "text.verbosity must be one of low, medium, high");
+    assert.equal(resp.body.error.type, "invalid_request_error");
+    assert.equal(resp.body.error.code, "invalid_parameter");
+  }
+  assert.equal(calls.length, 0);
+
+  const unsupportedClaudeVerbosity = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/responses",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-sonnet-4-6",
+      input: "hello",
+      text: { verbosity: "low" },
+    },
+  });
+
+  assert.equal(unsupportedClaudeVerbosity.status, 400);
+  assert.equal(
+    unsupportedClaudeVerbosity.body.error.message,
+    "text.verbosity is unsupported for Claude responses models"
+  );
+  assert.equal(unsupportedClaudeVerbosity.body.error.type, "invalid_request_error");
+  assert.equal(unsupportedClaudeVerbosity.body.error.code, "invalid_parameter");
+  assert.equal(calls.length, 0);
+
+  const codexVerbosity = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/responses",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      input: "hello",
+      text: { verbosity: "high" },
+    },
+  });
+
+  assert.equal(codexVerbosity.status, 200);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].url.includes("chatgpt.com"));
+  assert.deepEqual(calls[0].body.text, { verbosity: "high" });
+});
+
 test("OpenAI responses reasoning fields must be valid before upstream", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-reasoning-effort-"));
   writeCodexAuth(authDir);

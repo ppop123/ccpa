@@ -264,6 +264,7 @@ test("Codex responses handler sends bearer token and maps response", async (t) =
       temperature: 1.7,
       top_logprobs: 5,
       top_p: 0.9,
+      text: { verbosity: "high" },
       metadata: { tenant: "personal", workflow: "responses" },
     },
   });
@@ -301,6 +302,7 @@ test("Codex responses handler sends bearer token and maps response", async (t) =
   assert.equal(calls[0]?.body.temperature, 1.7);
   assert.equal(calls[0]?.body.top_logprobs, 5);
   assert.equal(calls[0]?.body.top_p, 0.9);
+  assert.deepEqual(calls[0]?.body.text, { verbosity: "high" });
   assert.deepEqual(calls[0]?.body.metadata, { tenant: "personal", workflow: "responses" });
   assert.equal(resp.status, 200);
   assert.equal(resp.body.object, "response");
@@ -2027,6 +2029,8 @@ test("Codex responses handler validates text format before auth and upstream", a
       text: { format: { type: "json_schema", name: "answer", schema: "object" } },
       message: "text.format.schema must be an object",
     },
+    { text: { verbosity: "quiet" }, message: "text.verbosity must be one of low, medium, high" },
+    { text: { verbosity: 1 }, message: "text.verbosity must be one of low, medium, high" },
   ];
 
   for (const invalid of invalids) {
