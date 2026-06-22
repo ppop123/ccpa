@@ -6,6 +6,9 @@ import yaml from "js-yaml";
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const API_KEY_RE = /\bsk-[A-Za-z0-9_-]{8,}\b/g;
+const DEFAULT_CODEX_MODEL = "gpt-5.4";
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6";
+const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 
 function redact(value, apiKey = "") {
   let text = String(value);
@@ -29,6 +32,9 @@ Options:
   --url URL            Live CCPA base URL, default config host/port or localhost
   --config PATH        Config file, default config.yaml
   --api-key KEY        API key, default CCPA_API_KEY or config api-keys[0]
+  --codex-model MODEL  Codex text model, default ${DEFAULT_CODEX_MODEL}
+  --claude-model MODEL Claude text model, default ${DEFAULT_CLAUDE_MODEL}
+  --image-model MODEL  Image model, default ${DEFAULT_IMAGE_MODEL}
   --timeout-ms MS      Timeout per request, default 60000
   --help, -h           Show this help
 
@@ -36,6 +42,9 @@ Environment:
   CCPA_BASE_URL
   CCPA_CONFIG
   CCPA_API_KEY
+  CCPA_UPSTREAM_MATRIX_CODEX_MODEL
+  CCPA_UPSTREAM_MATRIX_CLAUDE_MODEL
+  CCPA_UPSTREAM_MATRIX_IMAGE_MODEL
   CCPA_UPSTREAM_MATRIX_TIMEOUT_MS`);
 }
 
@@ -46,6 +55,9 @@ function parseArgs(argv) {
     config: process.env.CCPA_CONFIG || path.join(process.cwd(), "config.yaml"),
     url: process.env.CCPA_BASE_URL || "",
     apiKey: process.env.CCPA_API_KEY || "",
+    codexModel: process.env.CCPA_UPSTREAM_MATRIX_CODEX_MODEL || DEFAULT_CODEX_MODEL,
+    claudeModel: process.env.CCPA_UPSTREAM_MATRIX_CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL,
+    imageModel: process.env.CCPA_UPSTREAM_MATRIX_IMAGE_MODEL || DEFAULT_IMAGE_MODEL,
     timeoutMs: Number(process.env.CCPA_UPSTREAM_MATRIX_TIMEOUT_MS || 60000),
   };
 
@@ -63,6 +75,9 @@ function parseArgs(argv) {
     else if (arg === "--config") args.config = next();
     else if (arg === "--url") args.url = next();
     else if (arg === "--api-key") args.apiKey = next();
+    else if (arg === "--codex-model") args.codexModel = next();
+    else if (arg === "--claude-model") args.claudeModel = next();
+    else if (arg === "--image-model") args.imageModel = next();
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -74,6 +89,15 @@ function parseArgs(argv) {
 
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number");
+  }
+
+  for (const [flag, key] of [
+    ["--codex-model", "codexModel"],
+    ["--claude-model", "claudeModel"],
+    ["--image-model", "imageModel"],
+  ]) {
+    args[key] = String(args[key] || "").trim();
+    if (!args[key]) throw new Error(`${flag} must be a non-empty string`);
   }
 
   return args;
@@ -106,55 +130,97 @@ function resolveApiKey(args, config) {
   return firstKey.trim();
 }
 
-function buildChecks(includeImage) {
+function collectText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (!part || typeof part !== "object") return "";
+      if (typeof part.text === "string") return part.text;
+      if (typeof part.output_text === "string") return part.output_text;
+      return "";
+    })
+    .join("");
+}
+
+function extractChatText(body) {
+  return collectText(body?.choices?.[0]?.message?.content);
+}
+
+function extractResponseText(body) {
+  if (typeof body?.output_text === "string") return body.output_text;
+  if (!Array.isArray(body?.output)) return "";
+  return body.output
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      if (typeof item.text === "string") return item.text;
+      return collectText(item.content);
+    })
+    .join("");
+}
+
+function normalizeExpectedText(value) {
+  return String(value).trim().replace(/^["'`]+|["'`]+$/g, "").trim().toLowerCase();
+}
+
+function expectedTextCheck(extractText, expectedText) {
+  return {
+    expectedText,
+    extractText,
+    validate: (body) => normalizeExpectedText(extractText(body)) === normalizeExpectedText(expectedText),
+  };
+}
+
+function buildChecks(includeImage, models) {
   const checks = [
     {
       name: "codex chat completions",
       method: "POST",
       path: "/v1/chat/completions",
       body: {
-        model: "gpt-5.4",
+        model: models.codexModel,
         messages: [{ role: "user", content: "Reply with exactly: ok" }],
         max_tokens: 8,
         temperature: 0,
       },
-      validate: (body) => Boolean(body?.choices?.[0]?.message?.content),
+      ...expectedTextCheck(extractChatText, "ok"),
     },
     {
       name: "codex responses string input",
       method: "POST",
       path: "/v1/responses",
       body: {
-        model: "gpt-5.4",
+        model: models.codexModel,
         input: "Reply with exactly: ok",
         max_output_tokens: 8,
         temperature: 0,
       },
-      validate: (body) => Boolean(body?.output_text || body?.output || body?.status === "completed"),
+      ...expectedTextCheck(extractResponseText, "ok"),
     },
     {
       name: "claude chat completions",
       method: "POST",
       path: "/v1/chat/completions",
       body: {
-        model: "claude-sonnet-4-6",
+        model: models.claudeModel,
         messages: [{ role: "user", content: "Reply with exactly: ok" }],
         max_tokens: 8,
         temperature: 0,
       },
-      validate: (body) => Boolean(body?.choices?.[0]?.message?.content),
+      ...expectedTextCheck(extractChatText, "ok"),
     },
     {
       name: "claude responses string input",
       method: "POST",
       path: "/v1/responses",
       body: {
-        model: "claude-sonnet-4-6",
+        model: models.claudeModel,
         input: "Reply with exactly: ok",
         max_output_tokens: 8,
         temperature: 0,
       },
-      validate: (body) => Boolean(body?.output_text || body?.output || body?.status === "completed"),
+      ...expectedTextCheck(extractResponseText, "ok"),
     },
   ];
 
@@ -164,7 +230,7 @@ function buildChecks(includeImage) {
       method: "POST",
       path: "/v1/images/generations",
       body: {
-        model: "gpt-image-2",
+        model: models.imageModel,
         prompt: "A tiny blue square icon on a white background.",
         size: "1024x1024",
         response_format: "b64_json",
@@ -205,14 +271,16 @@ async function fetchJson(baseUrl, check, apiKey, timeoutMs) {
     throw new Error(`HTTP ${response.status} body=${JSON.stringify(body).slice(0, 500)}`);
   }
   if (!check.validate(body)) {
-    throw new Error(`HTTP ${response.status} unexpected body=${JSON.stringify(body).slice(0, 500)}`);
+    const expected = check.expectedText ? ` expected text "${check.expectedText}"` : "";
+    const actual = check.extractText ? ` actual=${JSON.stringify(check.extractText(body)).slice(0, 120)}` : "";
+    throw new Error(`HTTP ${response.status} unexpected body${expected}${actual} body=${JSON.stringify(body).slice(0, 500)}`);
   }
 }
 
 async function runMatrix(args) {
   const config = readConfigIfPresent(args.config);
   const baseUrl = resolveBaseUrl(args, config);
-  const checks = buildChecks(args.includeImage);
+  const checks = buildChecks(args.includeImage, args);
 
   console.log("ccpa upstream matrix");
   console.log(`mode: ${args.apply ? "apply" : "dry-run"}`);

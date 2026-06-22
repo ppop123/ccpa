@@ -42,7 +42,9 @@ function writeConfig(tmpDir: string, apiKey = "test-key"): string {
   return configPath;
 }
 
-async function startMatrixServer(options: { failPath?: string; apiKey?: string } = {}): Promise<{ server: http.Server; requests: any[] }> {
+async function startMatrixServer(
+  options: { failPath?: string; apiKey?: string; chatText?: string; responseText?: string } = {}
+): Promise<{ server: http.Server; requests: any[] }> {
   const requests: any[] = [];
   const apiKey = options.apiKey || "test-key";
   const server = http.createServer((req, res) => {
@@ -79,7 +81,7 @@ async function startMatrixServer(options: { failPath?: string; apiKey?: string }
         sendJson(200, {
           id: "chatcmpl_matrix",
           object: "chat.completion",
-          choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+          choices: [{ index: 0, message: { role: "assistant", content: options.chatText || "ok" }, finish_reason: "stop" }],
         });
         return;
       }
@@ -89,7 +91,7 @@ async function startMatrixServer(options: { failPath?: string; apiKey?: string }
           id: "resp_matrix",
           object: "response",
           status: "completed",
-          output_text: "ok",
+          output_text: options.responseText || "ok",
         });
         return;
       }
@@ -118,6 +120,9 @@ test("upstream matrix help documents dry-run default and quota-spending apply mo
   assert.match(result.stdout, /dry-run/i);
   assert.match(result.stdout, /--apply/);
   assert.match(result.stdout, /--include-image/);
+  assert.match(result.stdout, /--codex-model/);
+  assert.match(result.stdout, /--claude-model/);
+  assert.match(result.stdout, /--image-model/);
   assert.match(result.stdout, /spends upstream quota/i);
 });
 
@@ -133,6 +138,27 @@ test("upstream matrix defaults to dry-run and does not require config or network
   assert.doesNotMatch(result.stdout, /images generations/);
 });
 
+test("upstream matrix dry-run accepts explicit model overrides", async () => {
+  const result = await runMatrix([
+    "--include-image",
+    "--codex-model",
+    "gpt-custom",
+    "--claude-model",
+    "claude-custom",
+    "--image-model",
+    "gpt-image-custom",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /mode: dry-run/);
+  assert.match(result.stdout, /quota_spending: no/);
+  assert.match(result.stdout, /codex chat completions: POST \/v1\/chat\/completions model=gpt-custom/);
+  assert.match(result.stdout, /codex responses string input: POST \/v1\/responses model=gpt-custom/);
+  assert.match(result.stdout, /claude chat completions: POST \/v1\/chat\/completions model=claude-custom/);
+  assert.match(result.stdout, /claude responses string input: POST \/v1\/responses model=claude-custom/);
+  assert.match(result.stdout, /codex images generations: POST \/v1\/images\/generations model=gpt-image-custom/);
+});
+
 test("upstream matrix apply runs text generation checks through local CCPA", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-apply-"));
   const { server, requests } = await startMatrixServer();
@@ -144,7 +170,17 @@ test("upstream matrix apply runs text generation checks through local CCPA", asy
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  const result = await runMatrix(["--apply", "--url", baseUrl, "--config", configPath]);
+  const result = await runMatrix([
+    "--apply",
+    "--url",
+    baseUrl,
+    "--config",
+    configPath,
+    "--codex-model",
+    "gpt-custom",
+    "--claude-model",
+    "claude-custom",
+  ]);
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /mode: apply/);
@@ -158,13 +194,33 @@ test("upstream matrix apply runs text generation checks through local CCPA", asy
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.url} ${request.body.model}`),
     [
-      "POST /v1/chat/completions gpt-5.4",
-      "POST /v1/responses gpt-5.4",
-      "POST /v1/chat/completions claude-sonnet-4-6",
-      "POST /v1/responses claude-sonnet-4-6",
+      "POST /v1/chat/completions gpt-custom",
+      "POST /v1/responses gpt-custom",
+      "POST /v1/chat/completions claude-custom",
+      "POST /v1/responses claude-custom",
     ]
   );
   assert.ok(requests.every((request) => request.auth === "Bearer test-key"));
+});
+
+test("upstream matrix apply rejects text checks that do not return expected ok", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-text-"));
+  const { server } = await startMatrixServer({ responseText: "not ok" });
+  const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
+  const configPath = writeConfig(tmpDir);
+
+  t.after(async () => {
+    await stopServer(server);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const result = await runMatrix(["--apply", "--url", baseUrl, "--config", configPath]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /codex chat completions: ok/);
+  assert.match(result.stdout, /codex responses string input: failed/);
+  assert.match(result.stdout, /expected text "ok"/);
+  assert.match(result.stdout, /upstream_matrix: no/);
 });
 
 test("upstream matrix includes image generation only when explicitly requested", async (t) => {

@@ -397,10 +397,19 @@ matrix, start with the same dry-run plan used by `release:verify`:
 npm run upstream:matrix
 ```
 
+If your local config has moved to newer aliases, override the planned models
+without editing the script:
+
+```bash
+npm run upstream:matrix -- --codex-model gpt-5.5 --claude-model claude-opus-4-8
+```
+
 Add `-- --apply` only when you want to send real generation requests through the
 local CCPA service. The default apply matrix covers Codex and Claude text paths
 for `/v1/chat/completions` and `/v1/responses`; add `-- --apply --include-image`
-only when you also want to spend an image generation request.
+only when you also want to spend an image generation request. Text checks require
+the model to answer `ok`; an HTTP 200 or `status: completed` alone is not enough
+to pass the apply matrix.
 
 For launchd or cron-style monitoring, use the repository healthcheck wrapper:
 

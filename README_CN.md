@@ -360,8 +360,14 @@ npm run release:verify -- --require-provider-status ok
 npm run upstream:matrix
 ```
 
+如果本机配置已经切到更新的 alias，不需要改脚本，直接覆盖计划里的模型：
+
+```bash
+npm run upstream:matrix -- --codex-model gpt-5.5 --claude-model claude-opus-4-8
+```
+
 只有显式加 `-- --apply` 才会通过本机 CCPA 发送真实生成请求。默认 apply 矩阵覆盖
-Codex 和 Claude 的文本路径：`/v1/chat/completions` 与 `/v1/responses`；只有当你也想花一次图片生成请求时，才使用 `-- --apply --include-image`。
+Codex 和 Claude 的文本路径：`/v1/chat/completions` 与 `/v1/responses`；只有当你也想花一次图片生成请求时，才使用 `-- --apply --include-image`。文本检查要求模型实际回答 `ok`，单纯 HTTP 200 或 `status: completed` 不再算通过。
 
 如果要接 launchd 或 cron 类守护，使用仓库里的 healthcheck wrapper：
 
