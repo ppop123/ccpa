@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.0.0 - 2026-06-23
+
+This is the first stable self-use CCPA release after the June stabilization
+cycle. The focus is making the project practical as an OpenAI-compatible
+gateway for personal Claude and Codex subscription resources.
+
+### Highlights
+
+- Expanded OpenAI-compatible coverage across chat completions, responses,
+  images, embeddings fallback behavior, model listing, and Anthropic-native
+  passthrough routes.
+- Hardened Codex support for streaming, Responses API translation, image
+  generation, upstream error mapping, auth retry behavior, and model routing.
+- Improved Claude account handling with multiple token files, cooldown/backoff
+  state, retry headers, account availability reporting, and native endpoint
+  allow-list enforcement.
+- Added monitoring and admin visibility for provider health, account snapshots,
+  cache hit rate, request source, client IP, user agent, failure context, and
+  endpoint usage.
+- Added release and operations tooling: canary, contract check, healthcheck,
+  live rollout, rollout preflight, release readiness, strict release verify,
+  secret scan, security posture, log maintenance, build-info stamping, and
+  upstream matrix dry-run.
+- Strengthened security defaults around API key parsing, placeholder rejection,
+  per-key local rate limiting, redacted logs, npm audit, and release-facing
+  secret scanning.
+- Added the CCPA operations guide and release handoff docs for local and 50.9
+  deployments.
+
+### Compatibility Notes
+
+- The package version is now `2.0.0`; `/health` reports the running package
+  version and build metadata when built with `npm run build`.
+- The release gate is intentionally strict. Run `npm run release:verify` before
+  deploying a candidate.
+- `npm run upstream:matrix` remains dry-run by default and does not spend
+  subscription quota unless `--apply` is explicitly passed.
+- Some previously accepted but unsupported OpenAI parameters are now rejected
+  with OpenAI-style JSON errors instead of being silently passed through.
+
 ## 1.1.1 - 2026-04-09
 
 This release tightens runtime observability and fixes recent Codex compatibility regressions.
