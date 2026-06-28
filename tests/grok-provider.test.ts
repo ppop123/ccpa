@@ -42,7 +42,7 @@ function makeConfig(authDir: string, grokAuthFile: string, grokEnabled = true): 
       enabled: grokEnabled,
       "auth-file": grokAuthFile,
       "base-url": "https://api.x.ai/v1",
-      models: ["grok-4.3", "grok-build-0.1", "grok-imagine-0.9"],
+      models: ["grok-4.3", "grok-build-0.1", "grok-imagine-image"],
     },
     debug: "off",
   };
@@ -279,7 +279,7 @@ test("GrokProvider forwards image generation requests with the stored OAuth bear
     path: "/v1/images/generations",
     headers: { Authorization: "Bearer test-key" },
     body: {
-      model: "grok-imagine-0.9",
+      model: "grok-imagine-image",
       prompt: "A tiny blue icon",
       response_format: "b64_json",
     },
