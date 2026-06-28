@@ -154,6 +154,71 @@ test("loadConfig normalizes provider model lists and codex booleans", () => {
   }
 });
 
+test("loadConfig normalizes experimental Grok OAuth provider config", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-grok-"));
+  const configPath = path.join(tmpDir, "config.yaml");
+
+  try {
+    fs.writeFileSync(
+      configPath,
+      [
+        "api-keys:",
+        "  - sk-test-key",
+        "codex:",
+        "  enabled: false",
+        "  auth-file: ~/.codex/auth.json",
+        "  models: []",
+        "grok:",
+        "  enabled: \"true\"",
+        "  auth-file: ~/.grok/auth.json",
+        "  base-url: https://api.x.ai/v1/",
+        "  models:",
+        "    - grok-4.3",
+        "    - 123",
+        "    - \" \"",
+        "    - grok-build-0.1",
+      ].join("\n")
+    );
+
+    const config = loadConfig(configPath);
+
+    assert.equal(config.grok?.enabled, true);
+    assert.equal(config.grok?.["auth-file"], "~/.grok/auth.json");
+    assert.equal(config.grok?.["base-url"], "https://api.x.ai/v1");
+    assert.deepEqual(config.grok?.models, ["grok-4.3", "grok-build-0.1"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig keeps Grok OAuth disabled by default", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-grok-default-"));
+  const configPath = path.join(tmpDir, "config.yaml");
+
+  try {
+    fs.writeFileSync(
+      configPath,
+      [
+        "api-keys:",
+        "  - sk-test-key",
+        "codex:",
+        "  enabled: false",
+        "  auth-file: ~/.codex/auth.json",
+        "  models: []",
+      ].join("\n")
+    );
+
+    const config = loadConfig(configPath);
+
+    assert.equal(config.grok?.enabled, false);
+    assert.equal(config.grok?.["auth-file"], "~/.grok/auth.json");
+    assert.equal(config.grok?.["base-url"], "https://api.x.ai/v1");
+    assert.deepEqual(config.grok?.models, []);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("loadConfig preserves an explicit empty Claude model list", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-empty-claude-"));
   const configPath = path.join(tmpDir, "config.yaml");

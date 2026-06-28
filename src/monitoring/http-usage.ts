@@ -476,7 +476,7 @@ export function wrapTrackedHandler(
 }
 
 export function resolveUsageProvider(provider: ProviderName | null): UsageProvider {
-  if (provider === "claude" || provider === "codex") {
+  if (provider === "claude" || provider === "codex" || provider === "grok") {
     return provider;
   }
   return "unknown";

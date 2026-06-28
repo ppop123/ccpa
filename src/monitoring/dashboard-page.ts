@@ -428,7 +428,7 @@ export function renderMonitorPage(): string {
             </div>
           </div>
           <div id="provider-status" class="provider-stack">
-            <div class="empty">Load the dashboard to inspect Claude and Codex availability.</div>
+            <div class="empty">Load the dashboard to inspect provider availability.</div>
           </div>
         </article>
 

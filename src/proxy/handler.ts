@@ -1,7 +1,7 @@
 import { Request, Response as ExpressResponse } from "express";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
-import { AccountFailureKind, AccountManager } from "../accounts/manager";
+import { AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
@@ -11,6 +11,7 @@ import { callClaudeAPI } from "./claude-api";
 import { handleStreamingResponse } from "./streaming";
 import { readClaudeJsonResponse } from "./upstream-json";
 import { sendUnavailableClaudeAccount, setClaudeCooldownRetryAfter } from "./account-availability";
+import { classifyAccountFailure } from "./upstream-failures";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -328,13 +329,6 @@ function normalizeLegacyChatFunctionMessages(body: any): { body: any; error?: st
   }
 
   return changed ? { body: { ...body, messages: normalizedMessages } } : { body };
-}
-
-function classifyFailure(status: number): AccountFailureKind {
-  if (status === 429) return "rate_limit";
-  if (status === 401) return "auth";
-  if (status === 403) return "forbidden";
-  return "server";
 }
 
 function validateChatStream(body: any, res: ExpressResponse): boolean {
@@ -1602,7 +1596,10 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
           }
           manager.recordFailure(account.email, "auth");
         } else {
-          manager.recordFailure(account.email, classifyFailure(lastStatus));
+          const failureKind = classifyAccountFailure(lastStatus);
+          if (failureKind) {
+            manager.recordFailure(account.email, failureKind);
+          }
         }
 
         // Don't retry on client errors (400, 401, 403) except rate limits

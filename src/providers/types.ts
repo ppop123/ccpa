@@ -1,6 +1,6 @@
 import express from "express";
 
-export type ProviderName = "claude" | "codex";
+export type ProviderName = "claude" | "codex" | "grok";
 
 export interface ProviderModel {
   id: string;

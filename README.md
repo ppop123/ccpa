@@ -1,15 +1,15 @@
 # ccpa
 
-Claude + Codex Proxy API
+Claude + Codex + Grok Proxy API
 
 [中文](./README_CN.md)
 
-`ccpa` is a small local proxy that turns your existing Claude and Codex login state into OpenAI-compatible HTTP APIs.
+`ccpa` is a small local proxy that turns your existing Claude, Codex, and experimental Grok login state into OpenAI-compatible HTTP APIs.
 
 It is built for one machine, one operator, and one clear use case:
 
-- call Claude and Codex from your own scripts
-- expose both providers behind one local `base_url`
+- call Claude, Codex, and optionally Grok from your own scripts
+- expose the enabled providers behind one local `base_url`
 - route automatically by `model`
 
 It is intentionally not a multi-account pool, billing platform, or generic API gateway.
@@ -26,9 +26,10 @@ The repository is called `ccpa`. Some runtime logs and config paths still use th
 
 ## What it does
 
-- serves Claude and Codex from one process
+- serves Claude, Codex, and experimental Grok from one process
 - supports `POST /v1/chat/completions`
 - supports `POST /v1/responses`
+- supports `POST /v1/images/generations`
 - supports `GET /v1/models`
 - supports Claude native `POST /v1/messages` and `POST /v1/messages/count_tokens`
 - provides admin status at `GET /admin/accounts`
@@ -39,24 +40,29 @@ Routing is simple:
 
 - `claude-*` -> Claude
 - `gpt-*`, `o*`, `codex-*` -> Codex
+- `grok-*` -> Grok
 
 ## What you need
 
 - Node.js 20+
 - a Claude login if you want Claude models
 - a Codex login if you want Codex models
+- a SuperGrok OAuth login if you want experimental Grok models
 
 Claude auth is stored under `auth-dir`.
 
 Codex auth is read from `codex.auth-file`, with fallback to `~/.codex/auth.json` when the configured path does not exist.
 
+Experimental Grok auth is read from `grok.auth-file`, with fallback to `~/.grok/auth.json`. This adapter uses the local `grok login --oauth` state and forwards requests to xAI's OpenAI-compatible API; it does not require an xAI API key, but it should be treated as experimental because the OAuth file format is owned by the Grok CLI.
+
 The process can start in any of these modes:
 
 - Claude only
 - Codex only
-- Claude + Codex
+- Grok only
+- any combination of the enabled providers
 
-If neither side is available, startup fails.
+If no provider is available, startup fails.
 
 ## Install
 
@@ -98,6 +104,13 @@ codex:
     - "gpt-5.2"
     - "gpt-image-2"
 
+grok:
+  enabled: false
+  auth-file: "~/.grok/auth.json"
+  base-url: "https://api.x.ai/v1"
+  models:
+    - "grok-4.3"
+
 debug: "off"
 ```
 
@@ -138,6 +151,14 @@ npm run login:codex
 ```
 
 That runs the official `codex login` flow. If Codex CLI is missing, ccpa prints a clear install hint.
+
+Experimental Grok login:
+
+```bash
+grok login --oauth
+```
+
+Then enable `grok.enabled` and list the Grok model IDs you want to expose in `grok.models`.
 
 If only one provider is logged in, the server still starts and only exposes that side. `/admin/accounts` shows what is missing.
 
@@ -224,12 +245,15 @@ Claude aliases:
 - `haiku`
 
 Codex models come only from `codex.models`.
+Grok models come only from `grok.models` and require `grok.enabled: true`.
 
 Important runtime rules:
 
 - `codex.enabled: false` disables all Codex routing
+- `grok.enabled: false` disables all Grok routing
 - models not listed in `codex.models` return `400 Unsupported model`
-- `/v1/models` returns Claude built-ins plus configured Codex models
+- models not listed in `grok.models` return `400 Unsupported model`
+- `/v1/models` returns Claude built-ins plus configured Codex and Grok models
 
 ## Endpoints
 
@@ -237,7 +261,7 @@ Important runtime rules:
 |----------|---------|
 | `POST /v1/chat/completions` | OpenAI-compatible chat |
 | `POST /v1/responses` | OpenAI-compatible responses |
-| `POST /v1/images/generations` | OpenAI-compatible image generations through Codex OAuth |
+| `POST /v1/images/generations` | OpenAI-compatible image generations through Codex or Grok OAuth |
 | `POST /v1/messages` | Claude native messages |
 | `POST /v1/messages/count_tokens` | Claude native token counting |
 | `GET /v1/models` | List available models |
@@ -251,7 +275,7 @@ Both `/v1` and `/admin` require your API key.
 
 ## Monitoring
 
-`/admin/accounts` tells you whether Claude and Codex are currently available.
+`/admin/accounts` tells you whether Claude, Codex, and Grok are currently available.
 It also includes a `server` object with the running package version, process
 start time, uptime, and a provider readiness summary.
 
@@ -291,7 +315,7 @@ the key. It checks `/health`, `/admin/accounts`, `/v1/models`, and the expected
 JSON 404 from `/v1/embeddings`; it does not send a real model-generation
 request upstream. It also requires provider readiness of `degraded` or better
 by default, meaning at least one provider must be available. Use
-`--require-provider-status ok` when you want both Claude and Codex ready, or
+`--require-provider-status ok` when you want all enabled providers ready, or
 `--require-provider-status any` for diagnostics that should only verify the
 server contract.
 
@@ -398,7 +422,7 @@ release gate.
 
 The default rollout preflight requirement is `degraded`, meaning at least one
 provider is available. Use `npm run release:verify -- --require-provider-status
-ok` when the handoff must prove both Claude and Codex are ready.
+ok` when the handoff must prove all enabled providers are ready.
 When `--require-external-healthcheck-dir` is set, rollout preflight also treats
 the external wrapper's log-maintenance exports as part of the strict contract:
 the wrapper must enable `CCPA_HEALTHCHECK_MAINTAIN_LOGS` and set `CCPA_LOG_PATHS`

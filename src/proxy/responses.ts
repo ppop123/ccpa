@@ -2,25 +2,19 @@ import { Request, Response as ExpressResponse } from "express";
 import { randomUUID } from "node:crypto";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
-import { AccountFailureKind, AccountManager } from "../accounts/manager";
+import { AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
 import { applyCloaking } from "./cloaking";
 import { callClaudeAPI } from "./claude-api";
-import { resolveModel } from "./translator";
+import { resolveModel, shouldForwardClaudeTemperature } from "./translator";
 import { readClaudeJsonResponse } from "./upstream-json";
 import { sendUnavailableClaudeAccount, setClaudeCooldownRetryAfter } from "./account-availability";
+import { classifyAccountFailure } from "./upstream-failures";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-
-function classifyFailure(status: number): AccountFailureKind {
-  if (status === 429) return "rate_limit";
-  if (status === 401) return "auth";
-  if (status === 403) return "forbidden";
-  return "server";
-}
 
 function isValidResponsesInput(input: unknown): boolean {
   return typeof input === "string" || Array.isArray(input);
@@ -1393,7 +1387,7 @@ function responsesToClaude(body: any): any {
     }
   }
 
-  if (body.temperature !== undefined) {
+  if (body.temperature !== undefined && shouldForwardClaudeTemperature(model)) {
     claudeBody.temperature = body.temperature;
   }
   if (body.top_p !== undefined) {
@@ -2164,7 +2158,10 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
           }
           manager.recordFailure(account.email, "auth");
         } else {
-          manager.recordFailure(account.email, classifyFailure(lastStatus));
+          const failureKind = classifyAccountFailure(lastStatus);
+          if (failureKind) {
+            manager.recordFailure(account.email, failureKind);
+          }
         }
         if (!RETRYABLE_STATUSES.has(lastStatus)) break;
         if (attempt < MAX_RETRIES - 1) {

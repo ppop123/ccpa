@@ -23,6 +23,10 @@ test("o4-mini routes to codex", () => {
   assert.equal(resolveProviderFromModel("o4-mini"), "codex");
 });
 
+test("grok-4.3 routes to grok", () => {
+  assert.equal(resolveProviderFromModel("grok-4.3"), "grok");
+});
+
 test("invalid model input returns null instead of throwing", () => {
   assert.equal(resolveProviderFromModel(undefined as unknown as string), null);
   assert.equal(resolveProviderFromModel(null as unknown as string), null);

@@ -488,6 +488,63 @@ test("debug upstream error logging redacts sensitive upstream bodies", async (t)
   assert.match(output, /\[api-key:redacted\]/);
 });
 
+test("Claude upstream client errors do not cool down the account", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-400-no-cooldown-"));
+  const manager = makeManager(authDir, [makeToken()]);
+  const restoreFetch = withMockedFetch(async (input) => {
+    const url = String(input);
+    if (url === "https://api.anthropic.com/v1/messages?beta=true") {
+      return new Response(
+        JSON.stringify({
+          error: {
+            type: "invalid_request_error",
+            message: "`temperature` is deprecated for this model.",
+          },
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-opus-4-8",
+      messages: [{ role: "user", content: "trigger upstream client error" }],
+      temperature: 0.7,
+    },
+  });
+
+  assert.equal(resp.status, 400);
+
+  const adminResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/accounts",
+    headers: { Authorization: "Bearer test-key" },
+  });
+
+  assert.equal(adminResp.status, 200);
+  assert.equal(adminResp.body.accounts[0].available, true);
+  assert.equal(adminResp.body.accounts[0].cooldownUntil, 0);
+  assert.equal(adminResp.body.accounts[0].lastError, null);
+  assert.equal(adminResp.body.accounts[0].totalFailures, 0);
+});
+
 test("JSON parse and body limit errors return OpenAI-style JSON", async (t) => {
   const parseAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-parse-"));
   const limitAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-limit-"));
