@@ -53,7 +53,7 @@ function git(repoDir, args) {
 function readBuildInfo(repoDir) {
   const status = git(repoDir, ["status", "--short"]);
   return {
-    service: "auth2api",
+    service: "ccpa",
     git_commit: git(repoDir, ["rev-parse", "HEAD"]),
     git_branch: git(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]),
     git_dirty: status.length > 0,

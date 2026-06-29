@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a lightweight in-memory usage monitoring API to auth2api so local operators can inspect provider health, per-model traffic, and recent requests.
+**Goal:** Add a lightweight in-memory usage monitoring API to CCPA so local operators can inspect provider health, per-model traffic, and recent requests.
 
 **Architecture:** Introduce a process-local `UsageTracker` that collects request summaries at the HTTP routing layer. Wrap each routed handler in a monitoring adapter that captures endpoint, provider, model, status, latency, and usage tokens from JSON or SSE responses, then expose aggregated snapshots via `/admin/usage` and `/admin/usage/recent`.
 

@@ -25,7 +25,7 @@ function loadManager(authDir: string): AccountManager {
 }
 
 test("persists cooldown and counters across manager reloads", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-state-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-state-"));
 
   try {
     const token = makeToken();
@@ -66,7 +66,7 @@ test("persists cooldown and counters across manager reloads", () => {
 });
 
 test("exposes persisted refresh backoff in account snapshots", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-refresh-state-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-refresh-state-"));
 
   try {
     const token = makeToken();
@@ -96,7 +96,7 @@ test("exposes persisted refresh backoff in account snapshots", () => {
 });
 
 test("treats expired access tokens as unavailable until refresh succeeds", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-expired-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-expired-"));
 
   try {
     const token = makeToken({
@@ -119,7 +119,7 @@ test("treats expired access tokens as unavailable until refresh succeeds", () =>
 });
 
 test("loads multiple token files and selects the first usable account", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-multi-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-multi-"));
 
   try {
     const expired = makeToken({
@@ -173,7 +173,7 @@ test("loads multiple token files and selects the first usable account", () => {
 });
 
 test("reports the soonest account cooldown when no account is usable", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-cooldown-order-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-cooldown-order-"));
 
   try {
     const slow = makeToken({
@@ -220,7 +220,7 @@ test("reports the soonest account cooldown when no account is usable", () => {
 });
 
 test("reports the soonest refresh backoff when all accounts are expired", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-refresh-backoff-order-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-refresh-backoff-order-"));
 
   try {
     const slow = makeToken({
@@ -270,7 +270,7 @@ test("reports the soonest refresh backoff when all accounts are expired", () => 
 });
 
 test("redacts account identifiers and API keys in runtime logs", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-log-redaction-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-log-redaction-"));
   const token = makeToken({
     email: "private.user@example.com",
     refreshToken: "refresh-token-for-redaction",
@@ -315,7 +315,7 @@ test("redacts account identifiers and API keys in runtime logs", async (t) => {
 });
 
 test("redacts account identifiers in token file load errors", (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-token-log-redaction-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-token-log-redaction-"));
   const errors: string[] = [];
   const originalError = console.error;
 
@@ -338,7 +338,7 @@ test("redacts account identifiers in token file load errors", (t) => {
 });
 
 test("adding another account keeps runtime state free of token secrets", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-account-add-multi-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-account-add-multi-"));
 
   try {
     const manager = new AccountManager(authDir);

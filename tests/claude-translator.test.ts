@@ -5,7 +5,20 @@ import {
   claudeStreamEventToOpenai,
   claudeToOpenai,
   createStreamState,
+  openaiToClaude,
 } from "../src/proxy/translator";
+
+test("OpenAI to Claude translator drops deprecated temperature for opus 4.8", () => {
+  const body = openaiToClaude({
+    model: "claude-opus-4-8",
+    messages: [{ role: "user", content: "hello" }],
+    max_tokens: 8,
+    temperature: 0.7,
+  });
+
+  assert.equal(body.model, "claude-opus-4-8");
+  assert.equal(body.temperature, undefined);
+});
 
 test("Claude translator returns legacy function_call for legacy functions requests", () => {
   const resp = claudeToOpenai(

@@ -10,6 +10,7 @@ import { resolveUsageProvider, setFailureContext, wrapTrackedHandler } from "./m
 import { UsageTracker } from "./monitoring/usage";
 import { ClaudeProvider } from "./providers/claude";
 import { CodexProvider } from "./providers/codex";
+import { GrokProvider } from "./providers/grok";
 import { resolveProviderFromModel } from "./providers/router";
 import { authenticationError, invalidRequest, rateLimitError } from "./errors/openai";
 import { redactForLog } from "./logging/redact";
@@ -144,7 +145,7 @@ function readRuntimeBuildInfo() {
 function runtimeIdentity() {
   const build = readRuntimeBuildInfo();
   return {
-    service: "auth2api",
+    service: "ccpa",
     version: PACKAGE_VERSION,
     started_at: SERVER_STARTED_AT,
     uptime_ms: Math.max(0, Date.now() - SERVER_STARTED_AT_MS),
@@ -187,6 +188,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
   const app = express();
   const claudeProvider = new ClaudeProvider(config, manager);
   const codexProvider = new CodexProvider(config);
+  const grokProvider = new GrokProvider(config);
   const usageTracker = new UsageTracker();
   const rateLimitMiddleware = createRateLimitMiddleware(config["rate-limit"]);
   const guardClaudeNativeModel =
@@ -209,6 +211,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
     (
       claudeHandler: express.RequestHandler,
       codexHandler: express.RequestHandler,
+      grokHandler: express.RequestHandler,
       endpoint: string
     ): express.RequestHandler =>
     wrapTrackedHandler(
@@ -218,7 +221,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
         provider: (req) => {
           const model = req.body?.model;
           const provider = resolveProviderFromModel(model);
-          if (provider === "claude" || provider === "codex") {
+          if (provider === "claude" || provider === "codex" || provider === "grok") {
             return provider;
           }
           if (claudeProvider.supportsModel(model)) {
@@ -226,6 +229,9 @@ export function createServer(config: Config, manager: AccountManager): express.A
           }
           if (codexProvider.supportsModel(model)) {
             return "codex";
+          }
+          if (grokProvider.supportsModel(model)) {
+            return "grok";
           }
           return resolveUsageProvider(null);
         },
@@ -243,6 +249,20 @@ export function createServer(config: Config, manager: AccountManager): express.A
         }
 
         const provider = resolveProviderFromModel(model);
+
+        if (provider === "grok") {
+          if (!grokProvider.supportsModel(model)) {
+            setFailureContext(res, {
+              stage: "routing",
+              kind: "unsupported_model",
+              message: `Unsupported model: ${String(model)}`,
+            });
+            res.status(400).json(invalidRequest(`Unsupported model: ${String(model)}`, "unsupported_model"));
+            return;
+          }
+          grokHandler(req, res, next);
+          return;
+        }
 
         if (provider === "codex") {
           if (!codexProvider.supportsModel(model)) {
@@ -279,6 +299,11 @@ export function createServer(config: Config, manager: AccountManager): express.A
 
         if (codexProvider.supportsModel(model)) {
           codexHandler(req, res, next);
+          return;
+        }
+
+        if (grokProvider.supportsModel(model)) {
+          grokHandler(req, res, next);
           return;
         }
 
@@ -355,6 +380,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
     routeByModel(
       claudeProvider.handleChatCompletions(),
       codexProvider.handleChatCompletions(),
+      grokProvider.handleChatCompletions(),
       "POST /v1/chat/completions"
     )
   );
@@ -363,6 +389,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
     routeByModel(
       claudeProvider.handleResponses(),
       codexProvider.handleResponses(),
+      grokProvider.handleResponses(),
       "POST /v1/responses"
     )
   );
@@ -370,10 +397,35 @@ export function createServer(config: Config, manager: AccountManager): express.A
     "/v1/images/generations",
     wrapTrackedHandler(
       usageTracker,
-      { endpoint: "POST /v1/images/generations", provider: "codex" },
+      {
+        endpoint: "POST /v1/images/generations",
+        provider: (req) => {
+          const model = req.body?.model || "gpt-image-2";
+          const provider = resolveProviderFromModel(model);
+          if (provider === "grok" || grokProvider.supportsModel(model)) {
+            return "grok";
+          }
+          return "codex";
+        },
+      },
       (req, res, next) => {
         const model = req.body?.model || "gpt-image-2";
         req.body = { ...req.body, model };
+
+        if (resolveProviderFromModel(model) === "grok" || grokProvider.supportsModel(model)) {
+          if (!grokProvider.supportsModel(model)) {
+            setFailureContext(res, {
+              stage: "routing",
+              kind: "unsupported_model",
+              message: `Unsupported model: ${String(model)}`,
+            });
+            res.status(400).json(invalidRequest(`Unsupported model: ${String(model)}`, "unsupported_model"));
+            return;
+          }
+          grokProvider.handleImageGenerations()(req, res, next);
+          return;
+        }
+
         if (!codexProvider.supportsModel(model)) {
           setFailureContext(res, {
             stage: "routing",
@@ -407,7 +459,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
   );
 
   app.get("/v1/models", (_req, res) => {
-    const models = [...claudeProvider.listModels(), ...codexProvider.listModels()];
+    const models = [...claudeProvider.listModels(), ...codexProvider.listModels(), ...grokProvider.listModels()];
     res.json({
       object: "list",
       data: models.map((model) => ({
@@ -435,29 +487,37 @@ export function createServer(config: Config, manager: AccountManager): express.A
   });
 
   app.get("/monitor", (_req, res) => {
-    res.type("html").send(renderMonitorPage());
+    res
+      .set("Cache-Control", "no-store")
+      .type("html")
+      .send(renderMonitorPage());
   });
 
   app.get("/admin/accounts", (_req, res) => {
     const claudeStatus = claudeProvider.getStatus();
     const codexStatus = codexProvider.getStatus();
-    res.json({
-      server: serverReadiness([claudeStatus, codexStatus]),
+    const grokStatus = grokProvider.getStatus();
+    const readinessProviders = config.grok?.enabled
+      ? [claudeStatus, codexStatus, grokStatus]
+      : [claudeStatus, codexStatus];
+    res.set("Cache-Control", "no-store").json({
+      server: serverReadiness(readinessProviders),
       accounts: manager.getSnapshots(),
       account_count: manager.accountCount,
       claude: claudeStatus,
       codex: codexStatus,
+      grok: grokStatus,
       generated_at: new Date().toISOString(),
     });
   });
 
   app.get("/admin/usage", (_req, res) => {
-    res.json(usageTracker.snapshot());
+    res.set("Cache-Control", "no-store").json(usageTracker.snapshot());
   });
 
   app.get("/admin/usage/recent", (req, res) => {
     const limit = Number(req.query.limit);
-    res.json(usageTracker.recent(Number.isFinite(limit) ? limit : undefined));
+    res.set("Cache-Control", "no-store").json(usageTracker.recent(Number.isFinite(limit) ? limit : undefined));
   });
 
   app.use("/admin", (req, res) => {

@@ -206,7 +206,7 @@ async function expectOkJson(baseUrl, check, apiKey, timeoutMs, redact) {
 function assertRuntimeIdentity(health) {
   const ok =
     health?.status === "ok" &&
-    health?.service === "auth2api" &&
+    health?.service === "ccpa" &&
     typeof health?.version === "string" &&
     health.version.length > 0 &&
     typeof health?.started_at === "string" &&

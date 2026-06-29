@@ -48,7 +48,7 @@ test("ccpa healthcheck documents restart controls in help output", async () => {
 });
 
 test("ccpa healthcheck preserves launchctl failure exit status", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-"));
   const fakeCanary = path.join(tmpDir, "fake-canary");
   const fakeLaunchctl = path.join(tmpDir, "launchctl");
   const logPath = path.join(tmpDir, "healthcheck.log");
@@ -106,7 +106,7 @@ test("ccpa healthcheck preserves launchctl failure exit status", async (t) => {
 });
 
 test("ccpa healthcheck preserves canary failure exit status when restart is disabled", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-no-restart-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-no-restart-"));
   const fakeCanary = path.join(tmpDir, "fake-canary");
   const logPath = path.join(tmpDir, "healthcheck.log");
 
@@ -153,7 +153,7 @@ test("ccpa healthcheck preserves canary failure exit status when restart is disa
 });
 
 test("ccpa healthcheck redacts account identifiers before writing logs", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-redact-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-redact-"));
   const fakeCanary = path.join(tmpDir, "fake-canary");
   const logPath = path.join(tmpDir, "healthcheck.log");
 
@@ -203,7 +203,7 @@ test("ccpa healthcheck redacts account identifiers before writing logs", async (
 });
 
 test("ccpa healthcheck treats opt-in log maintenance as non-blocking", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-log-maintenance-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-log-maintenance-"));
   const fakeCanary = path.join(tmpDir, "fake-canary");
   const fakeMaintenance = path.join(tmpDir, "fake-maintenance");
   const logPath = path.join(tmpDir, "healthcheck.log");
@@ -266,7 +266,7 @@ test("ccpa healthcheck treats opt-in log maintenance as non-blocking", async (t)
 });
 
 test("ccpa healthcheck runs the no-upstream contract gate after canary", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-contract-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-contract-"));
   const fakeNode = path.join(tmpDir, "fake-node");
   const logPath = path.join(tmpDir, "healthcheck.log");
   const canaryScript = path.join(tmpDir, "ccpa-canary.mjs");
@@ -326,7 +326,7 @@ test("ccpa healthcheck runs the no-upstream contract gate after canary", async (
 });
 
 test("ccpa healthcheck can disable the contract gate explicitly", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-healthcheck-no-contract-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-healthcheck-no-contract-"));
   const fakeNode = path.join(tmpDir, "fake-node");
   const logPath = path.join(tmpDir, "healthcheck.log");
   const canaryScript = path.join(tmpDir, "ccpa-canary.mjs");

@@ -91,7 +91,7 @@ test("ccpa rollout preflight documents read-only behavior and rollout controls",
 });
 
 test("ccpa rollout preflight reports stale live canary without leaking API keys", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-stale-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-stale-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -143,7 +143,7 @@ test("ccpa rollout preflight reports stale live canary without leaking API keys"
 });
 
 test("ccpa rollout preflight runs contract gate and redacts failures", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-contract-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-contract-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -194,7 +194,7 @@ test("ccpa rollout preflight runs contract gate and redacts failures", async (t)
 });
 
 test("ccpa rollout preflight passes when local files and canary are ready", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-ready-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-ready-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -235,7 +235,7 @@ test("ccpa rollout preflight passes when local files and canary are ready", asyn
 });
 
 test("ccpa rollout preflight recognizes quoted bare npm healthcheck wrappers", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-quoted-npm-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-quoted-npm-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -272,7 +272,7 @@ test("ccpa rollout preflight recognizes quoted bare npm healthcheck wrappers", a
 });
 
 test("ccpa rollout preflight fails when required external healthcheck dir drifts", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-dir-drift-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-healthcheck-dir-drift-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -323,7 +323,7 @@ test("ccpa rollout preflight fails when required external healthcheck dir drifts
 });
 
 test("ccpa rollout preflight accepts external healthcheck cd into the required dir", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-dir-ok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-healthcheck-dir-ok-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -365,7 +365,7 @@ test("ccpa rollout preflight accepts external healthcheck cd into the required d
 });
 
 test("ccpa rollout preflight fails when required external healthcheck omits log maintenance paths", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-log-paths-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-healthcheck-log-paths-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -415,7 +415,7 @@ test("ccpa rollout preflight fails when required external healthcheck omits log 
 });
 
 test("ccpa rollout preflight accepts cd dashdash into the required dir", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-cd-dashdash-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-healthcheck-cd-dashdash-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -456,7 +456,7 @@ test("ccpa rollout preflight accepts cd dashdash into the required dir", async (
 });
 
 test("ccpa rollout preflight fails when the final external healthcheck cd drifts", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-healthcheck-final-cd-drift-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-healthcheck-final-cd-drift-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const externalHealthcheck = path.join(tmpDir, "external-healthcheck.sh");
@@ -509,7 +509,7 @@ test("ccpa rollout preflight fails when the final external healthcheck cd drifts
 });
 
 test("ccpa rollout preflight passes required build commit to canary", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-build-commit-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-build-commit-"));
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");
   const canaryArgs = path.join(tmpDir, "canary-args.log");
@@ -553,7 +553,7 @@ test("ccpa rollout preflight passes required build commit to canary", async (t) 
 });
 
 test("ccpa rollout preflight defaults operator paths from the current user", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-preflight-user-defaults-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-preflight-user-defaults-"));
   const homeDir = path.join(tmpDir, "home");
   const { config, dist, repoHealthcheck, logMaintenance, contract } = writeBasicFiles(tmpDir);
   const canary = path.join(tmpDir, "fake-canary.mjs");

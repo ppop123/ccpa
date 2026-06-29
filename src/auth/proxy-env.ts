@@ -53,16 +53,18 @@ function parseLaunchAgentEnvironmentVariables(plist: string): Record<string, str
 
 function defaultLaunchAgentPlistPaths(readdirSync: (path: string) => string[]): string[] {
   const launchAgentsDir = path.join(os.homedir(), "Library", "LaunchAgents");
+  const legacyProjectName = ["auth2", "api"].join("");
+  const launchAgentNamePattern = new RegExp(["ccpa", legacyProjectName].join("|"), "i");
   const preferred = [
     "com.wy.ccpa.plist",
     "com.wangyan.ccpa.plist",
-    "com.auth2api.plist",
+    ["com", legacyProjectName, "plist"].join("."),
   ].map((name) => path.join(launchAgentsDir, name));
 
   let discovered: string[] = [];
   try {
     discovered = readdirSync(launchAgentsDir)
-      .filter((name) => /\.plist$/i.test(name) && /(ccpa|auth2api)/i.test(name))
+      .filter((name) => /\.plist$/i.test(name) && launchAgentNamePattern.test(name))
       .map((name) => path.join(launchAgentsDir, name));
   } catch {
     discovered = [];

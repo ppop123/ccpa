@@ -1,20 +1,18 @@
 # ccpa
 
-Claude + Codex Proxy API
+Claude + Codex + Grok Proxy API
 
 [English](./README.md)
 
-`ccpa` 是一个本地代理，用来把你机器上已有的 Claude 和 Codex 登录态，变成可供脚本调用的 OpenAI 兼容 HTTP API。
+`ccpa` 是一个本地代理，用来把你机器上已有的 Claude、Codex，以及实验性的 Grok 登录态，变成可供脚本调用的 OpenAI 兼容 HTTP API。
 
 它的目标很单纯：
 
 - 给你自己的脚本用
-- 用一个本地 `base_url` 同时接 Claude 和 Codex
+- 用一个本地 `base_url` 同时接 Claude、Codex 和可选的 Grok
 - 按 `model` 自动路由
 
 它有简单的 Claude 备用账号池，但不是计费平台、多租户服务，也不是通用网关。
-
-仓库名是 `ccpa`，但运行时日志和部分配置路径里仍然会看到旧的内部名字 `auth2api`。
 
 ## 文档
 
@@ -24,9 +22,10 @@ Claude + Codex Proxy API
 
 ## 它能做什么
 
-- 一个进程同时服务 Claude 和 Codex
+- 一个进程同时服务 Claude、Codex 和实验性的 Grok
 - 支持 `POST /v1/chat/completions`
 - 支持 `POST /v1/responses`
+- 支持 `POST /v1/images/generations`
 - 支持 `GET /v1/models`
 - 支持 Claude 原生 `POST /v1/messages` 和 `POST /v1/messages/count_tokens`
 - 提供 `GET /admin/accounts` 查看 provider 状态
@@ -37,24 +36,29 @@ Claude + Codex Proxy API
 
 - `claude-*` -> Claude
 - `gpt-*`、`o*`、`codex-*` -> Codex
+- `grok-*` -> Grok
 
 ## 运行前提
 
 - Node.js 20+
 - 如果要用 Claude，需要 Claude 登录态
 - 如果要用 Codex，需要 Codex 登录态
+- 如果要用实验性的 Grok，需要 SuperGrok OAuth 登录态
 
 Claude token 存在 `auth-dir` 目录里。
 
 Codex 登录态优先读取 `codex.auth-file`，如果配置路径不存在，再回退到 `~/.codex/auth.json`。
 
+实验性的 Grok 登录态优先读取 `grok.auth-file`，如果配置路径不存在，再回退到 `~/.grok/auth.json`。这个 adapter 使用 `grok login --oauth` 生成的本地状态，并转发到 xAI 的 OpenAI 兼容 API；不需要 xAI API key，但 OAuth 文件格式由 Grok CLI 控制，所以要按实验功能看待。
+
 服务支持三种启动方式：
 
 - 只开 Claude
 - 只开 Codex
-- Claude + Codex 同时开
+- 只开 Grok
+- 启用 provider 的任意组合
 
-如果两边都不可用，启动会直接失败。
+如果没有任何 provider 可用，启动会直接失败。
 
 ## 安装
 
@@ -65,6 +69,11 @@ npm install
 npm run build
 cp config.example.yaml config.yaml
 ```
+
+从公开发布前的本机 checkout 升级时：先从干净 commit 重新 build，把 launchd wrapper
+和 healthcheck wrapper 都指向 `ccpa` checkout 目录，再跑 `npm run release:verify`
+确认 live 进程可用。CCPA 仍会兼容读取旧 LaunchAgent plist 里的代理环境变量，但新安装
+建议使用当前的 `com.wy.ccpa.plist` 命名。
 
 ## 5 分钟跑起来
 
@@ -79,7 +88,7 @@ cp config.example.yaml config.yaml
 host: ""
 port: 8317
 
-auth-dir: "~/.auth2api"
+auth-dir: "~/.ccpa"
 
 api-keys:
   - "sk-replace-with-a-long-random-key"
@@ -96,12 +105,19 @@ codex:
     - "gpt-5.2"
     - "gpt-image-2"
 
+grok:
+  enabled: false
+  auth-file: "~/.grok/auth.json"
+  base-url: "https://api.x.ai/v1"
+  models:
+    - "grok-4.3"
+
 debug: "off"
 ```
 
-完整配置可以直接看 [config.example.yaml](/Users/wy/auth2api/config.example.yaml)。
+完整配置可以直接看 [config.example.yaml](config.example.yaml)。
 
-本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](/Users/wy/auth2api/config.example.yaml) 里调整。启用后按已鉴权 API key 隔离 bucket，同一个 IP 下某个客户端 key 超限不会连带消耗另一个 key 的额度。
+本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](config.example.yaml) 里调整。启用后按已鉴权 API key 隔离 bucket，同一个 IP 下某个客户端 key 超限不会连带消耗另一个 key 的额度。
 
 启动：
 
@@ -136,6 +152,14 @@ npm run login:codex
 ```
 
 这会调用官方 `codex login`。如果本机没装 Codex CLI，ccpa 会直接给出安装提示。
+
+实验性 Grok 登录：
+
+```bash
+grok login --oauth
+```
+
+然后在 `config.yaml` 里打开 `grok.enabled`，并把要暴露的 Grok 模型写进 `grok.models`。
 
 如果当前只登录了一边 provider，服务仍然可以启动，只是另一边模型不可用；缺失信息会在 `/admin/accounts` 里直接提示。
 
@@ -220,12 +244,15 @@ Claude 便捷别名：
 - `haiku`
 
 Codex 模型只来自 `codex.models`。
+Grok 模型只来自 `grok.models`，并且需要 `grok.enabled: true`。
 
 运行时关键规则：
 
 - `codex.enabled: false` 会彻底关闭 Codex 路由
+- `grok.enabled: false` 会彻底关闭 Grok 路由
 - 不在 `codex.models` 里的 Codex 模型会直接返回 `400 Unsupported model`
-- `/v1/models` 返回 Claude 内置模型加上配置里的 Codex 模型
+- 不在 `grok.models` 里的 Grok 模型会直接返回 `400 Unsupported model`
+- `/v1/models` 返回 Claude 内置模型加上配置里的 Codex 和 Grok 模型
 
 ## 接口
 
@@ -233,7 +260,7 @@ Codex 模型只来自 `codex.models`。
 |------|------|
 | `POST /v1/chat/completions` | OpenAI 兼容聊天接口 |
 | `POST /v1/responses` | OpenAI 兼容 responses 接口 |
-| `POST /v1/images/generations` | 通过 Codex OAuth 生成图片的 OpenAI 兼容接口 |
+| `POST /v1/images/generations` | 通过 Codex 或 Grok OAuth 生成图片的 OpenAI 兼容接口 |
 | `POST /v1/messages` | Claude 原生消息接口 |
 | `POST /v1/messages/count_tokens` | Claude 原生 token 计数接口 |
 | `GET /v1/models` | 列出可用模型 |
@@ -247,7 +274,7 @@ Codex 模型只来自 `codex.models`。
 
 ## 监控
 
-`/admin/accounts` 用来判断 Claude 和 Codex 当前是否可用。
+`/admin/accounts` 用来判断 Claude、Codex 和 Grok 当前是否可用。
 它也会返回一个 `server` 对象，包含正在运行的包版本、进程启动时间、运行时长，以及 provider readiness 摘要。
 
 `/health` 不需要 API key，并且刻意不返回账号或 provider 细节。它只返回非敏感的进程身份信息，例如 `service`、`version`、`started_at` 和 `uptime_ms`。
@@ -279,7 +306,7 @@ http://127.0.0.1:8317/monitor
 npm run canary -- --url http://127.0.0.1:8317
 ```
 
-canary 默认从 `config.yaml` 读取 `api-keys[0]`，不会打印 key。它检查 `/health`、`/admin/accounts`、`/v1/models`，以及 `/v1/embeddings` 是否返回预期的 JSON 404；不会向上游发送真实模型生成请求。默认还要求 provider readiness 至少达到 `degraded`，也就是至少一个 provider 可用。发布或完整巡检时可以加 `--require-provider-status ok` 要求 Claude 和 Codex 都可用；排障时可以用 `--require-provider-status any` 只检查服务契约。
+canary 默认从 `config.yaml` 读取 `api-keys[0]`，不会打印 key。它检查 `/health`、`/admin/accounts`、`/v1/models`，以及 `/v1/embeddings` 是否返回预期的 JSON 404；不会向上游发送真实模型生成请求。默认还要求 provider readiness 至少达到 `degraded`，也就是至少一个 provider 可用。发布或完整巡检时可以加 `--require-provider-status ok` 要求所有启用的 provider 都可用；排障时可以用 `--require-provider-status any` 只检查服务契约。
 
 如果本机存在 `dist/index.js`，canary 还会检查 live 进程的启动时间是否晚于本地 dist 构建时间。跨机器检查远端实例、且本机不共享同一份 dist 文件时，可以加 `--no-dist-check`。
 
@@ -356,7 +383,7 @@ API key；如果服务监听所有网卡但本地 rate limit 关闭，只给 war
 可以单独运行 `npm run security:audit`。它使用
 `npm audit --audit-level=moderate`，中危及以上依赖安全公告会让 release gate 失败。
 
-默认 rollout preflight 要求是 `degraded`，也就是至少一个 provider 可用。如果这次交付必须证明 Claude 和 Codex 都可用，用：
+默认 rollout preflight 要求是 `degraded`，也就是至少一个 provider 可用。如果这次交付必须证明所有启用的 provider 都可用，用：
 
 ```bash
 npm run release:verify -- --require-provider-status ok
@@ -434,7 +461,7 @@ docker build -t ccpa .
 
 docker run -d \
   -p 8317:8317 \
-  -v ~/.auth2api:/data \
+  -v ~/.ccpa:/data \
   -v ~/.codex/auth.json:/root/.codex/auth.json:ro \
   -v ./config.yaml:/config/config.yaml \
   ccpa
@@ -458,7 +485,6 @@ npm run test:smoke
 
 ## Inspired by
 
-- [auth2api](https://github.com/AmazingAng/auth2api)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 - [sub2api](https://github.com/Wei-Shaw/sub2api)
 

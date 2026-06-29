@@ -24,6 +24,13 @@ export interface CodexConfig {
   models: string[];
 }
 
+export interface GrokConfig {
+  enabled: boolean;
+  "auth-file": string;
+  "base-url": string;
+  models: string[];
+}
+
 export interface ClaudeConfig {
   models: string[];
   "beta-header": string;
@@ -47,6 +54,7 @@ export interface Config {
   timeouts: TimeoutConfig;
   claude?: ClaudeConfig;
   codex: CodexConfig;
+  grok?: GrokConfig;
   "rate-limit"?: RateLimitConfig;
   debug: DebugMode;
 }
@@ -74,7 +82,7 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
 const DEFAULT_CONFIG: Config = {
   host: "",
   port: 8317,
-  "auth-dir": "~/.auth2api",
+  "auth-dir": "~/.ccpa",
   "api-keys": [],
   "body-limit": "200mb",
   cloaking: {
@@ -97,6 +105,12 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     "auth-file": "~/.codex/auth.json",
     store: false,
+    models: [],
+  },
+  grok: {
+    enabled: false,
+    "auth-file": "~/.grok/auth.json",
+    "base-url": "https://api.x.ai/v1",
     models: [],
   },
   "rate-limit": DEFAULT_RATE_LIMIT_CONFIG,
@@ -189,6 +203,17 @@ function normalizeRateLimit(value: unknown): RateLimitConfig {
   };
 }
 
+function normalizeBaseUrl(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
 function normalizeCloaking(value: unknown): CloakingConfig {
   const raw =
     value && typeof value === "object" && !Array.isArray(value)
@@ -246,6 +271,7 @@ export function loadConfig(configPath?: string): Config {
     const parsed = yaml.load(raw) as Partial<Config>;
     const parsedClaude = parsed.claude as Partial<ClaudeConfig> | undefined;
     const parsedCodex = parsed.codex as Partial<CodexConfig> | undefined;
+    const parsedGrok = parsed.grok as Partial<GrokConfig> | undefined;
     const hasClaudeModelList = Array.isArray(parsedClaude?.models);
     const claudeModels = normalizeStringList(parsedClaude?.models);
     config = {
@@ -271,6 +297,23 @@ export function loadConfig(configPath?: string): Config {
           normalizeBoolean(parsedCodex?.store, DEFAULT_CONFIG.codex.store),
         models: normalizeStringList(parsedCodex?.models),
       },
+      grok: {
+        ...DEFAULT_CONFIG.grok,
+        ...(parsedGrok || {}),
+        enabled: normalizeBoolean(
+          parsedGrok?.enabled,
+          DEFAULT_CONFIG.grok?.enabled ?? false
+        ),
+        "auth-file":
+          typeof parsedGrok?.["auth-file"] === "string" && parsedGrok["auth-file"].trim()
+            ? parsedGrok["auth-file"].trim()
+            : DEFAULT_CONFIG.grok?.["auth-file"] ?? "~/.grok/auth.json",
+        "base-url": normalizeBaseUrl(
+          parsedGrok?.["base-url"],
+          DEFAULT_CONFIG.grok?.["base-url"] ?? "https://api.x.ai/v1"
+        ),
+        models: normalizeStringList(parsedGrok?.models),
+      },
       "rate-limit": {
         ...DEFAULT_RATE_LIMIT_CONFIG,
         ...((parsed["rate-limit"] as Partial<RateLimitConfig> | undefined) || {}),
@@ -282,6 +325,21 @@ export function loadConfig(configPath?: string): Config {
   config["api-keys"] = normalizeApiKeys((config as Config & { "api-keys"?: unknown })["api-keys"]);
   config.cloaking = normalizeCloaking((config as Config & { cloaking?: unknown }).cloaking);
   config.timeouts = normalizeTimeouts((config as Config & { timeouts?: unknown }).timeouts);
+  const rawGrok = (config as Config & { grok?: Partial<GrokConfig> }).grok;
+  config.grok = {
+    ...DEFAULT_CONFIG.grok,
+    ...(rawGrok || {}),
+    enabled: normalizeBoolean(rawGrok?.enabled, DEFAULT_CONFIG.grok?.enabled ?? false),
+    "auth-file":
+      typeof rawGrok?.["auth-file"] === "string" && rawGrok["auth-file"].trim()
+        ? rawGrok["auth-file"].trim()
+        : DEFAULT_CONFIG.grok?.["auth-file"] ?? "~/.grok/auth.json",
+    "base-url": normalizeBaseUrl(
+      rawGrok?.["base-url"],
+      DEFAULT_CONFIG.grok?.["base-url"] ?? "https://api.x.ai/v1"
+    ),
+    models: normalizeStringList(rawGrok?.models),
+  };
   config["rate-limit"] = normalizeRateLimit(
     (config as Config & { "rate-limit"?: unknown })["rate-limit"]
   );

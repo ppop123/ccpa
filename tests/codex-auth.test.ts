@@ -13,7 +13,7 @@ function writeJson(filePath: string, value: unknown): void {
 }
 
 test("loadConfig provides default codex config", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-config-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-config-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   const config = loadConfig(configPath);
@@ -39,7 +39,7 @@ test("loadConfig provides default codex config", () => {
 });
 
 test("loadConfig reads configured Claude models and beta header", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-config-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-config-"));
   const configPath = path.join(tmpDir, "config.yaml");
   fs.writeFileSync(
     configPath,
@@ -64,7 +64,7 @@ test("loadConfig reads configured Claude models and beta header", () => {
 });
 
 test("loadConfig reads configured Codex store default", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-store-config-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-store-config-"));
   const configPath = path.join(tmpDir, "config.yaml");
   fs.writeFileSync(
     configPath,
@@ -89,7 +89,7 @@ test("loadConfig reads configured Codex store default", () => {
 });
 
 test("CodexAuthStore reads token data from auth.json", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-"));
   const authDir = path.join(tmpDir, ".codex");
   const authFile = path.join(authDir, "auth.json");
   writeJson(authFile, {
@@ -113,7 +113,7 @@ test("CodexAuthStore reads token data from auth.json", () => {
 });
 
 test("CodexAuthStore rejects auth.json without access token", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-missing-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-missing-"));
   const authFile = path.join(tmpDir, "auth.json");
   writeJson(authFile, {
     auth_mode: "oauth",
@@ -129,7 +129,7 @@ test("CodexAuthStore rejects auth.json without access token", () => {
 });
 
 test("CodexAuthStore rejects missing auth.json with a controlled error", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-absent-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-absent-"));
   const authFile = path.join(tmpDir, "auth.json");
   const store = new CodexAuthStore(authFile);
 
@@ -137,7 +137,7 @@ test("CodexAuthStore rejects missing auth.json with a controlled error", () => {
 });
 
 test("CodexAuthStore reloads when auth.json mtime changes", async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-reload-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-reload-"));
   const authFile = path.join(tmpDir, "auth.json");
   writeJson(authFile, {
     auth_mode: "oauth",
@@ -168,7 +168,7 @@ test("CodexAuthStore reloads when auth.json mtime changes", async () => {
 });
 
 test("CodexAuthStore falls back to secondary auth file when primary is missing", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-fallback-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-fallback-"));
   const primaryAuthFile = path.join(tmpDir, "missing", "auth.json");
   const fallbackAuthFile = path.join(tmpDir, ".codex", "auth.json");
   writeJson(fallbackAuthFile, {
@@ -192,7 +192,7 @@ test("CodexAuthStore falls back to secondary auth file when primary is missing",
 });
 
 test("CodexAuthStore does not fall back when the primary auth file exists but is invalid", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-auth-invalid-primary-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-auth-invalid-primary-"));
   const primaryAuthFile = path.join(tmpDir, "primary", "auth.json");
   const fallbackAuthFile = path.join(tmpDir, ".codex", "auth.json");
 

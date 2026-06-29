@@ -176,8 +176,8 @@ function withMockedFetch(
 }
 
 test("browser monitor page is directly openable and does not embed API keys", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-monitor-page-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-monitor-page-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-monitor-page-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-monitor-page-home-"));
   writeCodexAuth(authDir);
 
   const config = makeConfig(authDir);
@@ -198,6 +198,7 @@ test("browser monitor page is directly openable and does not embed API keys", as
 
   assert.equal(pageResp.status, 200);
   assert.match(String(pageResp.headers["content-type"] || ""), /text\/html/i);
+  assert.match(String(pageResp.headers["cache-control"] || ""), /no-store/i);
   assert.match(pageResp.rawBody, /ccpa Monitor/i);
   assert.match(pageResp.rawBody, /\/admin\/accounts/);
   assert.match(pageResp.rawBody, /\/admin\/usage/);
@@ -206,13 +207,26 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /Cache Hit/i);
   assert.match(pageResp.rawBody, /refresh failures/i);
   assert.match(pageResp.rawBody, /next refresh/i);
+  assert.match(pageResp.rawBody, /renderProviderCard\("Grok", accounts\.grok \|\|/);
+  assert.match(pageResp.rawBody, /cache:\s*"no-store"/);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
   assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
+
+  for (const path of ["/admin/accounts", "/admin/usage", "/admin/usage/recent?limit=1"]) {
+    const adminResp = await requestJson({
+      server,
+      method: "GET",
+      path,
+      headers: { Authorization: "Bearer test-key" },
+    });
+    assert.equal(adminResp.status, 200);
+    assert.match(String(adminResp.headers["cache-control"] || ""), /no-store/i);
+  }
 });
 
 test("admin usage endpoints expose provider, endpoint, and model aggregates", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-home-"));
   writeCodexAuth(authDir);
 
   const config = makeConfig(authDir);
@@ -358,8 +372,8 @@ test("admin usage endpoints expose provider, endpoint, and model aggregates", as
 });
 
 test("admin usage tracks failed requests and recent limit", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-home-"));
   writeCodexAuth(authDir);
 
   const config = makeConfig(authDir);
@@ -449,8 +463,8 @@ test("admin usage tracks failed requests and recent limit", async (t) => {
 });
 
 test("admin recent includes failure context for local routing failures", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-routing-failure-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-routing-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-routing-failure-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-routing-home-"));
   writeCodexAuth(authDir);
 
   const config = makeConfig(authDir);
@@ -499,8 +513,8 @@ test("admin recent includes failure context for local routing failures", async (
 });
 
 test("admin recent includes failure context for cooldown failures", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-cooldown-failure-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-usage-cooldown-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-cooldown-failure-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-cooldown-home-"));
   writeCodexAuth(authDir);
 
   const token = makeToken();

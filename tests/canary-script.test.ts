@@ -46,7 +46,7 @@ async function startCanaryServer(options: CanaryServerOptions = {}): Promise<htt
           ? { status: "ok" }
           : {
               status: "ok",
-              service: "auth2api",
+              service: "ccpa",
               version: "1.1.0",
               started_at: options.startedAt || "2026-06-18T00:00:00.000Z",
               uptime_ms: 1234,
@@ -64,7 +64,7 @@ async function startCanaryServer(options: CanaryServerOptions = {}): Promise<htt
     if (req.url === "/admin/accounts") {
       sendJson(200, {
         server: {
-          service: "auth2api",
+          service: "ccpa",
           version: "1.1.0",
           started_at: "2026-06-18T00:00:00.000Z",
           uptime_ms: 1234,
@@ -148,7 +148,7 @@ function runCanary(args: string[]): Promise<{ code: number; stdout: string; stde
 }
 
 test("ccpa canary checks low-cost operational endpoints without leaking API keys", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-"));
   const server = await startCanaryServer();
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -172,7 +172,7 @@ test("ccpa canary checks low-cost operational endpoints without leaking API keys
 });
 
 test("ccpa canary fails when live health is from an old build", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-old-health-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-old-health-"));
   const server = await startCanaryServer({ legacyHealth: true });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -191,7 +191,7 @@ test("ccpa canary fails when live health is from an old build", async (t) => {
 });
 
 test("ccpa canary fails when the live process started before the local dist build", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-stale-dist-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-stale-dist-"));
   const server = await startCanaryServer({ startedAt: "2026-06-18T00:00:00.000Z" });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -211,7 +211,7 @@ test("ccpa canary fails when the live process started before the local dist buil
 });
 
 test("ccpa canary fails by default when no provider is available", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-no-provider-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-no-provider-"));
   const server = await startCanaryServer({
     providerStatus: "unavailable",
     providers: { total: 2, available: 0, unavailable: ["claude", "codex"] },
@@ -234,7 +234,7 @@ test("ccpa canary fails by default when no provider is available", async (t) => 
 });
 
 test("ccpa canary can require all providers to be available", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-provider-ok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-provider-ok-"));
   const server = await startCanaryServer();
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -263,7 +263,7 @@ test("ccpa canary can require all providers to be available", async (t) => {
 });
 
 test("ccpa canary prints Claude recovery hint without leaking account identity", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-claude-hint-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-claude-hint-"));
   const server = await startCanaryServer({
     providerStatus: "degraded",
     providers: { total: 2, available: 1, unavailable: ["claude"] },
@@ -308,7 +308,7 @@ test("ccpa canary prints Claude recovery hint without leaking account identity",
 });
 
 test("ccpa canary passes strict provider readiness when all providers are available", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-provider-strict-ok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-provider-strict-ok-"));
   const server = await startCanaryServer({
     providerStatus: "ok",
     providers: { total: 2, available: 2, unavailable: [] },
@@ -340,7 +340,7 @@ test("ccpa canary passes strict provider readiness when all providers are availa
 });
 
 test("ccpa canary can require a specific runtime build commit", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-canary-build-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-canary-build-"));
   const server = await startCanaryServer({
     build: {
       git_commit: "abc1234",

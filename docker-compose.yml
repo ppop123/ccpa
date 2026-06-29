@@ -1,5 +1,5 @@
 services:
-  auth2api:
+  ccpa:
     build: .
     ports:
       - "8317:8317"

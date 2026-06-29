@@ -2,12 +2,12 @@
 
 ## Scope
 
-This handoff captures the current CCPA stabilization candidate for `/Users/wy/auth2api`.
+This handoff captures the current CCPA stabilization candidate.
 The goal of the candidate is to turn the local and 50.9 deployments from daily firefighting into a stable self-use OpenAI-compatible gateway for Claude and Codex subscription resources.
 
 ## Current Verified State
 
-- Local repo: `/Users/wy/auth2api`
+- Local repo: the checked-out CCPA repository
 - Local branch: `codex/ccpa-stabilization`
 - Current runtime identity is verified by command, not by this static file: run `COMMIT="$(git rev-parse HEAD)"` and then `npm run canary -- --require-provider-status ok --require-build-commit "$COMMIT"` from the deployed tree.
 - Phase 184 example runtime commit before this handoff refresh: `caea69d Thread build commit through rollout gates`.
@@ -51,7 +51,7 @@ Latest 50.9 live/candidate readiness:
 - Strict release gate: passed against live `127.0.0.1:8317`
 - LaunchAgent rollback backup: `/Users/wangyan/Library/LaunchAgents/com.wangyan.ccpa.plist.bak-pre-clean-candidate-<short-sha>-<timestamp>`
 
-Treat the local `/Users/wy/auth2api` branch and the remote clean candidate above as the code source of truth. The old `/Users/wangyan/ccpa` tree remains useful for rollback history and logs, but it is no longer the live runtime source.
+Treat the local branch and the remote clean candidate above as the code source of truth. Older deployment trees remain useful for rollback history and logs, but they are no longer the live runtime source.
 
 ## Review Buckets
 

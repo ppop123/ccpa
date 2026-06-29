@@ -87,7 +87,7 @@ test("ccpa live rollout documents dry-run default and explicit apply controls", 
 });
 
 test("ccpa live rollout dry-run does not execute commands or modify external healthcheck", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-dry-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-dry-"));
   const { repoDir, logPath, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
   fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old\n");
@@ -116,7 +116,7 @@ test("ccpa live rollout dry-run does not execute commands or modify external hea
 });
 
 test("ccpa live rollout apply runs fake rollout commands without replacing external healthcheck by default", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-apply-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-apply-"));
   const { repoDir, logPath, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
   fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old\n");
@@ -150,7 +150,7 @@ test("ccpa live rollout apply runs fake rollout commands without replacing exter
 });
 
 test("ccpa live rollout can require the post-rollout build commit", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-build-commit-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-build-commit-"));
   const { repoDir, logPath, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
   fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old\n");
@@ -181,7 +181,7 @@ test("ccpa live rollout can require the post-rollout build commit", async (t) =>
 });
 
 test("ccpa live rollout defaults launchd label and external healthcheck to current operator", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-operator-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-operator-"));
   const { repoDir, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const uid = typeof process.getuid === "function" ? process.getuid() : "$(id -u)";
 
@@ -213,7 +213,7 @@ test("ccpa live rollout defaults launchd label and external healthcheck to curre
 });
 
 test("ccpa live rollout retries post-kickstart canary before contract checks", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-retry-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-retry-"));
   const repoDir = path.join(tmpDir, "repo");
   const binDir = path.join(tmpDir, "bin");
   const logPath = path.join(tmpDir, "calls.log");
@@ -279,7 +279,7 @@ test("ccpa live rollout retries post-kickstart canary before contract checks", a
 });
 
 test("ccpa live rollout apply can explicitly install a repository healthcheck wrapper", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-install-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-install-"));
   const { repoDir, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
   fs.writeFileSync(externalHealthcheck, "#!/usr/bin/env bash\necho old sk-secret1234567890\n");
@@ -318,7 +318,7 @@ test("ccpa live rollout apply can explicitly install a repository healthcheck wr
 });
 
 test("ccpa live rollout preserves PATH for bare npm external healthcheck wrappers", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-live-rollout-install-bare-npm-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-live-rollout-install-bare-npm-"));
   const { repoDir, npmBin, launchctlBin } = makeFakeRepo(tmpDir);
   const externalHealthcheck = path.join(tmpDir, "ccpa-healthcheck.sh");
   const npmDir = path.dirname(npmBin);

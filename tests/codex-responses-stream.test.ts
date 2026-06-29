@@ -142,7 +142,7 @@ function makeStreamResponse(chunks: string[]): Response {
 }
 
 test("Codex responses handler streams upstream SSE events through to the client", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-stream-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));

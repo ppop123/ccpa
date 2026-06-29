@@ -41,7 +41,7 @@ function makeProvider(config: Config): ClaudeProvider {
 }
 
 test("ClaudeProvider keeps the default Claude model list when config omits claude.models", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-provider-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-provider-"));
   const provider = makeProvider(makeConfig(authDir));
 
   try {
@@ -57,7 +57,7 @@ test("ClaudeProvider keeps the default Claude model list when config omits claud
 });
 
 test("ClaudeProvider lists and routes configured Claude aliases", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-provider-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-provider-"));
   const provider = makeProvider(
     makeConfig(authDir, ["claude-custom-20260616", "my-sonnet-alias"])
   );
@@ -75,7 +75,7 @@ test("ClaudeProvider lists and routes configured Claude aliases", () => {
 });
 
 test("ClaudeProvider preserves an explicit empty Claude model list", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-provider-empty-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-provider-empty-"));
   const provider = makeProvider(makeConfig(authDir, []));
 
   try {

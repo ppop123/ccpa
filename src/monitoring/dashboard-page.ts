@@ -428,7 +428,7 @@ export function renderMonitorPage(): string {
             </div>
           </div>
           <div id="provider-status" class="provider-stack">
-            <div class="empty">Load the dashboard to inspect Claude and Codex availability.</div>
+            <div class="empty">Load the dashboard to inspect provider availability.</div>
           </div>
         </article>
 
@@ -544,6 +544,7 @@ export function renderMonitorPage(): string {
 
         async function fetchJson(path, apiKey) {
           var response = await fetch(path, {
+            cache: "no-store",
             headers: {
               Authorization: "Bearer " + apiKey
             }
@@ -782,9 +783,18 @@ export function renderMonitorPage(): string {
           document.getElementById("metric-recent-count").textContent = formatNumber(usage.recentCount);
           document.getElementById("metric-generated-at").textContent = "usage snapshot " + formatDate(usage.generatedAt);
 
-          document.getElementById("provider-status").innerHTML =
-            renderProviderCard("Claude", accounts.claude) +
-            renderProviderCard("Codex", accounts.codex);
+          var providerCards = [
+            renderProviderCard("Claude", accounts.claude),
+            renderProviderCard("Codex", accounts.codex),
+            renderProviderCard("Grok", accounts.grok || {
+              available: false,
+              details: {
+                enabled: false,
+                hint: "No Grok provider status returned from /admin/accounts"
+              }
+            })
+          ];
+          document.getElementById("provider-status").innerHTML = providerCards.join("");
 
           var accountCards = (accounts.accounts || []).map(renderAccountCard);
           document.getElementById("account-status").innerHTML = accountCards.length

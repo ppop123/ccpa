@@ -38,7 +38,7 @@ test("security posture help documents read-only config checks", async () => {
 });
 
 test("security posture fails placeholder and weak API keys", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-weak-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-security-posture-weak-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const configPath = writeConfig(
     tmpDir,
@@ -63,7 +63,7 @@ test("security posture fails placeholder and weak API keys", async (t) => {
 });
 
 test("security posture rejects long test API key placeholders", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-test-placeholder-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-security-posture-test-placeholder-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const configPath = writeConfig(
     tmpDir,
@@ -85,7 +85,7 @@ test("security posture rejects long test API key placeholders", async (t) => {
 });
 
 test("security posture warns but does not fail for all-interface bind with rate limit disabled", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-warn-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-security-posture-warn-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const configPath = writeConfig(
     tmpDir,
@@ -109,7 +109,7 @@ test("security posture warns but does not fail for all-interface bind with rate 
 });
 
 test("security posture normalizes quoted rate limit booleans like runtime config", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-rate-limit-string-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-security-posture-rate-limit-string-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const configPath = writeConfig(
     tmpDir,
@@ -133,7 +133,7 @@ test("security posture normalizes quoted rate limit booleans like runtime config
 });
 
 test("security posture passes strong localhost config", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-security-posture-ok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-security-posture-ok-"));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const configPath = writeConfig(
     tmpDir,

@@ -261,7 +261,7 @@ function makeSseResponse(chunks: string[]): Response {
 }
 
 test("accepts x-api-key auth and serves models/admin state", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -295,7 +295,7 @@ test("accepts x-api-key auth and serves models/admin state", async (t) => {
 });
 
 test("unimplemented /v1 endpoints return an OpenAI-style JSON 404", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -319,7 +319,7 @@ test("unimplemented /v1 endpoints return an OpenAI-style JSON 404", async (t) =>
 });
 
 test("unimplemented /admin endpoints return JSON after authentication", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-admin-404-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-404-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -343,7 +343,7 @@ test("unimplemented /admin endpoints return JSON after authentication", async (t
 });
 
 test("local /v1 authentication errors return OpenAI-style JSON", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-auth-errors-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-auth-errors-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -377,7 +377,7 @@ test("local /v1 authentication errors return OpenAI-style JSON", async (t) => {
 });
 
 test("local /v1 authentication runs before JSON parsing", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-auth-before-json-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-auth-before-json-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -401,7 +401,7 @@ test("local /v1 authentication runs before JSON parsing", async (t) => {
 });
 
 test("unauthenticated /v1 requests do not consume local rate limit quota", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-rate-limit-auth-first-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-rate-limit-auth-first-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, []);
   const server = await startApp(
@@ -439,8 +439,8 @@ test("unauthenticated /v1 requests do not consume local rate limit quota", async
 });
 
 test("debug upstream error logging redacts sensitive upstream bodies", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-debug-redact-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-debug-redact-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-debug-redact-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-debug-redact-home-"));
   const config = { ...makeConfig(authDir), debug: "errors" as const };
   const manager = makeManager(authDir, [makeToken({ email: "private.user@example.com" })]);
   const originalError = console.error;
@@ -488,9 +488,66 @@ test("debug upstream error logging redacts sensitive upstream bodies", async (t)
   assert.match(output, /\[api-key:redacted\]/);
 });
 
+test("Claude upstream client errors do not cool down the account", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-400-no-cooldown-"));
+  const manager = makeManager(authDir, [makeToken()]);
+  const restoreFetch = withMockedFetch(async (input) => {
+    const url = String(input);
+    if (url === "https://api.anthropic.com/v1/messages?beta=true") {
+      return new Response(
+        JSON.stringify({
+          error: {
+            type: "invalid_request_error",
+            message: "`temperature` is deprecated for this model.",
+          },
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const server = await startApp(makeConfig(authDir), manager);
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "claude-opus-4-8",
+      messages: [{ role: "user", content: "trigger upstream client error" }],
+      temperature: 0.7,
+    },
+  });
+
+  assert.equal(resp.status, 400);
+
+  const adminResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/accounts",
+    headers: { Authorization: "Bearer test-key" },
+  });
+
+  assert.equal(adminResp.status, 200);
+  assert.equal(adminResp.body.accounts[0].available, true);
+  assert.equal(adminResp.body.accounts[0].cooldownUntil, 0);
+  assert.equal(adminResp.body.accounts[0].lastError, null);
+  assert.equal(adminResp.body.accounts[0].totalFailures, 0);
+});
+
 test("JSON parse and body limit errors return OpenAI-style JSON", async (t) => {
-  const parseAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-parse-"));
-  const limitAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-json-limit-"));
+  const parseAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-json-parse-"));
+  const limitAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-json-limit-"));
   const parseManager = makeManager(parseAuthDir, [makeToken()]);
   const limitManager = makeManager(limitAuthDir, [makeToken()]);
   const parseServer = await startApp(makeConfig(parseAuthDir), parseManager);
@@ -542,7 +599,7 @@ test("JSON parse and body limit errors return OpenAI-style JSON", async (t) => {
 });
 
 test("Claude proxy validation errors return OpenAI-style JSON", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-validation-errors-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-validation-errors-"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -579,7 +636,7 @@ test("Claude proxy validation errors return OpenAI-style JSON", async (t) => {
 });
 
 test("OpenAI-compatible endpoints require a model parameter", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-missing-model-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-missing-model-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async () => {
     throw new Error("Upstream should not be called when model is missing");
@@ -624,7 +681,7 @@ test("OpenAI-compatible endpoints require a model parameter", async (t) => {
 });
 
 test("OpenAI responses input must be a string or array before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-input-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-input-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -662,7 +719,7 @@ test("OpenAI responses input must be a string or array before upstream", async (
 });
 
 test("OpenAI responses input arrays must not be empty before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-empty-responses-input-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-empty-responses-input-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -716,7 +773,7 @@ test("OpenAI responses input arrays must not be empty before upstream", async (t
 });
 
 test("OpenAI responses input items must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-input-items-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-input-items-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -787,7 +844,7 @@ test("OpenAI responses input items must be valid before upstream", async (t) => 
 });
 
 test("OpenAI responses typed function input items must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-typed-items-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-typed-items-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -874,7 +931,7 @@ test("OpenAI responses typed function input items must be valid before upstream"
 });
 
 test("OpenAI responses content parts must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-content-parts-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-content-parts-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -949,7 +1006,7 @@ test("OpenAI responses content parts must be valid before upstream", async (t) =
 });
 
 test("OpenAI responses tools must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -1045,7 +1102,7 @@ test("OpenAI responses tools must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses hosted tools are explicitly unsupported before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-hosted-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-hosted-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -1109,7 +1166,7 @@ test("OpenAI responses hosted tools are explicitly unsupported before upstream",
 });
 
 test("Claude responses rejects image_generation tool usage before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-image-tool-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-responses-image-tool-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -1166,7 +1223,7 @@ test("Claude responses rejects image_generation tool usage before upstream", asy
 });
 
 test("OpenAI responses custom tools route only to Codex", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-custom-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-custom-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -1304,7 +1361,7 @@ test("OpenAI responses custom tools route only to Codex", async (t) => {
 });
 
 test("OpenAI responses allowed_tools tool_choice routes only to Codex", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-allowed-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-allowed-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -1390,7 +1447,7 @@ test("OpenAI responses allowed_tools tool_choice routes only to Codex", async (t
 });
 
 test("OpenAI responses hosted tool_choice is explicitly unsupported before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-hosted-tool-choice-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-hosted-tool-choice-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -1454,7 +1511,7 @@ test("OpenAI responses hosted tool_choice is explicitly unsupported before upstr
 });
 
 test("Claude responses rejects unsupported text format before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-text-format-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-responses-text-format-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -1537,7 +1594,7 @@ test("Claude responses rejects unsupported text format before upstream", async (
 });
 
 test("OpenAI responses text verbosity must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-text-verbosity-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-text-verbosity-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -1639,7 +1696,7 @@ test("OpenAI responses text verbosity must be valid before upstream", async (t) 
 });
 
 test("OpenAI responses reasoning fields must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-reasoning-effort-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-reasoning-effort-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -1811,7 +1868,7 @@ test("OpenAI responses reasoning fields must be valid before upstream", async (t
 });
 
 test("OpenAI responses sampling parameters must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-sampling-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-sampling-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -1976,7 +2033,7 @@ test("OpenAI responses sampling parameters must be valid before upstream", async
 });
 
 test("OpenAI responses parallel_tool_calls must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-parallel-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-parallel-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2092,7 +2149,7 @@ test("OpenAI responses parallel_tool_calls must be valid before upstream", async
 });
 
 test("OpenAI responses service_tier must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-service-tier-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-service-tier-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2192,7 +2249,7 @@ test("OpenAI responses service_tier must be valid before upstream", async (t) =>
 });
 
 test("OpenAI responses prompt cache parameters must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-prompt-cache-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-prompt-cache-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2309,7 +2366,7 @@ test("OpenAI responses prompt cache parameters must be valid before upstream", a
 });
 
 test("OpenAI responses truncation must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-truncation-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-truncation-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2425,7 +2482,7 @@ test("OpenAI responses truncation must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses previous_response_id must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-previous-response-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-previous-response-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2527,7 +2584,7 @@ test("OpenAI responses previous_response_id must be valid before upstream", asyn
 });
 
 test("OpenAI responses conversation must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-conversation-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-conversation-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2665,7 +2722,7 @@ test("OpenAI responses conversation must be valid before upstream", async (t) =>
 });
 
 test("OpenAI responses include must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-include-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-include-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2767,7 +2824,7 @@ test("OpenAI responses include must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses stream_options must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-stream-options-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-stream-options-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -2904,7 +2961,7 @@ test("OpenAI responses stream_options must be valid before upstream", async (t) 
 });
 
 test("OpenAI responses store must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-store-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-store-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3020,7 +3077,7 @@ test("OpenAI responses store must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses instructions must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-instructions-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-instructions-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3118,7 +3175,7 @@ test("OpenAI responses instructions must be valid before upstream", async (t) =>
 });
 
 test("OpenAI responses background must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-background-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-background-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3255,7 +3312,7 @@ test("OpenAI responses background must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses safety_identifier must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-safety-id-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-safety-id-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3361,7 +3418,7 @@ test("OpenAI responses safety_identifier must be valid before upstream", async (
 });
 
 test("OpenAI responses user must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-user-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-user-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3457,7 +3514,7 @@ test("OpenAI responses user must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses max_tool_calls must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-max-tool-calls-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-max-tool-calls-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3559,7 +3616,7 @@ test("OpenAI responses max_tool_calls must be valid before upstream", async (t) 
 });
 
 test("OpenAI responses prompt must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-prompt-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-prompt-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3672,7 +3729,7 @@ test("OpenAI responses prompt must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses context_management must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-context-management-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-context-management-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3793,7 +3850,7 @@ test("OpenAI responses context_management must be valid before upstream", async 
 });
 
 test("OpenAI responses metadata must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-metadata-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-metadata-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -3894,7 +3951,7 @@ test("OpenAI responses metadata must be valid before upstream", async (t) => {
 });
 
 test("OpenAI responses rejects invalid tool_choice strings before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-responses-tool-choice-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-responses-tool-choice-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -3965,7 +4022,7 @@ test("OpenAI responses rejects invalid tool_choice strings before upstream", asy
 });
 
 test("OpenAI responses stream must be a boolean before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-invalid-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-invalid-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -4015,7 +4072,7 @@ test("OpenAI responses stream must be a boolean before upstream", async (t) => {
 });
 
 test("Claude OpenAI-compatible token limits must be positive integers before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-token-limits-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-token-limits-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -4144,7 +4201,7 @@ test("Claude OpenAI-compatible token limits must be positive integers before ups
 });
 
 test("OpenAI chat reasoning_effort must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-reasoning-effort-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-reasoning-effort-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4250,7 +4307,7 @@ test("OpenAI chat reasoning_effort must be valid before upstream", async (t) => 
 });
 
 test("OpenAI chat output modalities must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-modalities-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-modalities-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -4327,7 +4384,7 @@ test("OpenAI chat output modalities must be valid before upstream", async (t) =>
 });
 
 test("OpenAI chat parallel_tool_calls must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-parallel-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-parallel-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4439,7 +4496,7 @@ test("OpenAI chat parallel_tool_calls must be valid before upstream", async (t) 
 });
 
 test("OpenAI chat service_tier must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-service-tier-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-service-tier-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4534,7 +4591,7 @@ test("OpenAI chat service_tier must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat prompt cache parameters must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-prompt-cache-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-prompt-cache-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4649,7 +4706,7 @@ test("OpenAI chat prompt cache parameters must be valid before upstream", async 
 });
 
 test("OpenAI chat metadata must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-metadata-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-metadata-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4761,7 +4818,7 @@ test("OpenAI chat metadata must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat safety_identifier must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-safety-identifier-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-safety-identifier-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4870,7 +4927,7 @@ test("OpenAI chat safety_identifier must be valid before upstream", async (t) =>
 });
 
 test("OpenAI chat user must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-user-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-user-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -4967,7 +5024,7 @@ test("OpenAI chat user must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat seed must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-seed-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-seed-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5053,7 +5110,7 @@ test("OpenAI chat seed must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat store must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-store-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-store-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5169,7 +5226,7 @@ test("OpenAI chat store must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat stream_options must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-stream-options-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-stream-options-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5321,7 +5378,7 @@ test("OpenAI chat stream_options must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat web_search_options must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-web-search-options-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-web-search-options-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5440,7 +5497,7 @@ test("OpenAI chat web_search_options must be valid before upstream", async (t) =
 });
 
 test("OpenAI chat verbosity must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-verbosity-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-verbosity-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5536,7 +5593,7 @@ test("OpenAI chat verbosity must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat messages must not be empty before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-empty-chat-messages-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-empty-chat-messages-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -5590,7 +5647,7 @@ test("OpenAI chat messages must not be empty before upstream", async (t) => {
 });
 
 test("OpenAI chat message roles must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-chat-role-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-chat-role-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -5649,7 +5706,7 @@ test("OpenAI chat message roles must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat developer messages stay instructional before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-developer-role-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-developer-role-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -5721,7 +5778,7 @@ test("OpenAI chat developer messages stay instructional before upstream", async 
 });
 
 test("OpenAI chat message content must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-chat-content-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-chat-content-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ body: any }> = [];
@@ -5828,7 +5885,7 @@ test("OpenAI chat message content must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat tool messages must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-invalid-chat-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-invalid-chat-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -5919,7 +5976,7 @@ test("OpenAI chat tool messages must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat stream must be a boolean before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -5969,7 +6026,7 @@ test("OpenAI chat stream must be a boolean before upstream", async (t) => {
 });
 
 test("OpenAI chat n must be 1 before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-n-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-n-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6027,7 +6084,7 @@ test("OpenAI chat n must be 1 before upstream", async (t) => {
 });
 
 test("OpenAI chat sampling parameters must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-sampling-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-sampling-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6111,7 +6168,7 @@ test("OpenAI chat sampling parameters must be valid before upstream", async (t) 
 });
 
 test("OpenAI chat prediction must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-prediction-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-prediction-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6188,7 +6245,7 @@ test("OpenAI chat prediction must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat logprobs must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-logprobs-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-logprobs-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6265,7 +6322,7 @@ test("OpenAI chat logprobs must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat logit_bias must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-logit-bias-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-logit-bias-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6373,7 +6430,7 @@ test("OpenAI chat logit_bias must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat penalties must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-penalties-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-penalties-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6470,7 +6527,7 @@ test("OpenAI chat penalties must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat response_format must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-response-format-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-response-format-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -6660,7 +6717,7 @@ test("OpenAI chat response_format must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat stop must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-stop-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-stop-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6718,7 +6775,7 @@ test("OpenAI chat stop must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat tools must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-tools-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
@@ -6881,7 +6938,7 @@ test("OpenAI chat tools must be valid before upstream", async (t) => {
 });
 
 test("OpenAI chat tool_choice must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-invalid-tool-choice-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-invalid-tool-choice-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -7085,7 +7142,7 @@ test("OpenAI chat tool_choice must be valid before upstream", async (t) => {
 });
 
 test("proxies a non-stream chat completion through Claude OAuth token", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input, init) => {
     const url = String(input);
@@ -7130,7 +7187,7 @@ test("proxies a non-stream chat completion through Claude OAuth token", async (t
 });
 
 test("OpenAI chat legacy functions and function_call route through providers", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-legacy-functions-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-legacy-functions-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -7224,7 +7281,7 @@ test("OpenAI chat legacy functions and function_call route through providers", a
 });
 
 test("OpenAI chat legacy functions return legacy function_call responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-legacy-function-response-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-legacy-function-response-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -7292,7 +7349,7 @@ test("OpenAI chat legacy functions return legacy function_call responses", async
 });
 
 test("OpenAI chat legacy function call messages route through providers", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-chat-legacy-function-messages-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-chat-legacy-function-messages-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -7403,7 +7460,7 @@ test("OpenAI chat legacy function call messages route through providers", async 
 });
 
 test("routes OpenAI responses requests to Codex based on model", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -7462,7 +7519,7 @@ test("routes OpenAI responses requests to Codex based on model", async (t) => {
 });
 
 test("routes OpenAI responses string input to Claude as a user message", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -7509,7 +7566,7 @@ test("routes OpenAI responses string input to Claude as a user message", async (
 });
 
 test("OpenAI responses developer input stays instructional before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-developer-role-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-developer-role-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -7582,7 +7639,7 @@ test("OpenAI responses developer input stays instructional before upstream", asy
 });
 
 test("routes OpenAI responses image content parts to Claude without dropping image_url strings", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-image-part-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-image-part-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -7639,7 +7696,7 @@ test("routes OpenAI responses image content parts to Claude without dropping ima
 });
 
 test("routes OpenAI responses function tool_choice without losing tool name", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-responses-tool-choice-name-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-responses-tool-choice-name-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
@@ -7713,7 +7770,7 @@ test("routes OpenAI responses function tool_choice without losing tool name", as
 });
 
 test("routes OpenAI chat completions requests to Codex based on model", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -7772,7 +7829,7 @@ test("routes OpenAI chat completions requests to Codex based on model", async (t
 });
 
 test("proxies OpenAI image generations through Codex image generation", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any; auth?: string; accept?: string }> = [];
@@ -7836,7 +7893,7 @@ test("proxies OpenAI image generations through Codex image generation", async (t
 });
 
 test("OpenAI image generation params must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-image-params-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-image-params-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const calls: any[] = [];
@@ -7896,7 +7953,7 @@ test("OpenAI image generation params must be valid before upstream", async (t) =
 });
 
 test("retries a transient Codex image generation network failure", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   let attempts = 0;
@@ -7939,7 +7996,7 @@ test("retries a transient Codex image generation network failure", async (t) => 
 });
 
 test("retries Codex image generation with refreshed auth after upstream 401", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir, "stale-codex-token");
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ auth?: string }> = [];
@@ -7987,7 +8044,7 @@ test("retries Codex image generation with refreshed auth after upstream 401", as
 });
 
 test("refreshes the OAuth token after an upstream 401 and retries successfully", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: string[] = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -8067,7 +8124,7 @@ test("refreshes the OAuth token after an upstream 401 and retries successfully",
 });
 
 test("Claude upstream 401 records auth failure when refresh fails", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-401-refresh-fail-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-401-refresh-fail-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: string[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8128,7 +8185,7 @@ test("Claude upstream 401 records auth failure when refresh fails", async (t) =>
 });
 
 test("Claude upstream invalid JSON returns upstream invalid response error", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-invalid-json-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-invalid-json-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -8178,7 +8235,7 @@ test("Claude upstream invalid JSON returns upstream invalid response error", asy
 });
 
 test("Claude chat stream records failure when upstream stream ends before completion", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-truncated-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-chat-truncated-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -8241,7 +8298,7 @@ test("Claude chat stream records failure when upstream stream ends before comple
 });
 
 test("Claude responses stream records failure when upstream stream ends before completion", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-truncated-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-responses-truncated-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -8304,7 +8361,7 @@ test("Claude responses stream records failure when upstream stream ends before c
 });
 
 test("Codex chat stream records failure when upstream stream ends before completion", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-truncated-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-truncated-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8355,7 +8412,7 @@ test("Codex chat stream records failure when upstream stream ends before complet
 });
 
 test("Codex chat stream records upstream SSE error events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-sse-error-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-sse-error-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8406,7 +8463,7 @@ test("Codex chat stream records upstream SSE error events", async (t) => {
 });
 
 test("Codex chat stream treats response.incomplete as a terminal event", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-incomplete-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-incomplete-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8459,7 +8516,7 @@ test("Codex chat stream treats response.incomplete as a terminal event", async (
 });
 
 test("Codex chat stream records response.failed events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-failed-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-failed-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8510,7 +8567,7 @@ test("Codex chat stream records response.failed events", async (t) => {
 });
 
 test("Codex chat stream treats response.completed as a terminal event", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-completed-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-completed-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8562,7 +8619,7 @@ test("Codex chat stream treats response.completed as a terminal event", async (t
 });
 
 test("Codex chat stream emits response.output_text.done text without deltas", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-output-text-done-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-output-text-done-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8615,7 +8672,7 @@ test("Codex chat stream emits response.output_text.done text without deltas", as
 });
 
 test("Codex responses stream records failure when upstream stream ends before completion", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-truncated-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-truncated-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8666,7 +8723,7 @@ test("Codex responses stream records failure when upstream stream ends before co
 });
 
 test("Codex responses stream records upstream SSE error events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-sse-error-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-sse-error-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8718,7 +8775,7 @@ test("Codex responses stream records upstream SSE error events", async (t) => {
 });
 
 test("Codex responses stream treats response.incomplete as a terminal event", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-incomplete-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-incomplete-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8770,7 +8827,7 @@ test("Codex responses stream treats response.incomplete as a terminal event", as
 });
 
 test("Codex responses stream records response.failed events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-failed-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-failed-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8822,7 +8879,7 @@ test("Codex responses stream records response.failed events", async (t) => {
 });
 
 test("Codex responses stream treats response.completed as a terminal event", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-completed-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-completed-stream-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
@@ -8874,7 +8931,7 @@ test("Codex responses stream treats response.completed as a terminal event", asy
 });
 
 test("Claude chat stream preserves event names across read chunks", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-split-event-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-chat-split-event-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -8926,7 +8983,7 @@ test("Claude chat stream preserves event names across read chunks", async (t) =>
 });
 
 test("Claude responses stream preserves event names across read chunks", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-split-event-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-responses-split-event-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -8978,7 +9035,7 @@ test("Claude responses stream preserves event names across read chunks", async (
 });
 
 test("returns rate limited when the configured account is cooled down", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   const manager = makeManager(authDir, [makeToken()]);
   manager.recordFailure("test@example.com", "rate_limit", "forced for smoke test");
   const restoreFetch = withMockedFetch(async () => {
@@ -9013,8 +9070,8 @@ test("returns rate limited when the configured account is cooled down", async (t
 });
 
 test("Claude exhausted upstream 429 responses include Retry-After", async (t) => {
-  const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-upstream-429-"));
-  const countAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-count-upstream-429-"));
+  const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-chat-upstream-429-"));
+  const countAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-count-upstream-429-"));
   const makePool = (prefix: string) => [
     makeToken({ email: `${prefix}-one@example.com`, accessToken: `${prefix}-one-access` }),
     makeToken({ email: `${prefix}-two@example.com`, accessToken: `${prefix}-two-access` }),
@@ -9080,7 +9137,7 @@ test("Claude exhausted upstream 429 responses include Retry-After", async (t) =>
 });
 
 test("Claude proxy missing account errors return OpenAI-style JSON", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-missing-account-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-missing-account-"));
   const manager = makeManager(authDir, []);
   const server = await startApp(makeConfig(authDir), manager);
 
@@ -9124,7 +9181,7 @@ test("Claude proxy missing account errors return OpenAI-style JSON", async (t) =
 });
 
 test("Claude proxy expired account errors return OpenAI-style JSON without upstream calls", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-expired-account-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-expired-account-"));
   const manager = makeManager(authDir, [
     makeToken({ expiresAt: new Date(Date.now() - 60_000).toISOString() }),
   ]);
@@ -9175,7 +9232,7 @@ test("Claude proxy expired account errors return OpenAI-style JSON without upstr
 });
 
 test("Claude proxy expired refresh backoff errors include Retry-After", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-refresh-backoff-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-refresh-backoff-"));
   const token = makeToken({ expiresAt: new Date(Date.now() - 60_000).toISOString() });
   const nextRefreshAttemptAt = Date.now() + 120_000;
   saveToken(authDir, token);
@@ -9244,8 +9301,8 @@ test("Claude proxy expired refresh backoff errors include Retry-After", async (t
 });
 
 test("Claude proxy upstream network errors return OpenAI-style JSON", async (t) => {
-  const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-chat-network-"));
-  const responsesAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-responses-network-"));
+  const chatAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-chat-network-"));
+  const responsesAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-responses-network-"));
   const chatManager = makeManager(chatAuthDir, [makeToken()]);
   const responsesManager = makeManager(responsesAuthDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async () => {
@@ -9297,9 +9354,9 @@ test("Claude proxy upstream network errors return OpenAI-style JSON", async (t) 
 });
 
 test("Claude native passthrough errors return OpenAI-style JSON", async (t) => {
-  const validationAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-validation-"));
-  const missingAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-missing-"));
-  const cooldownAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-cooldown-"));
+  const validationAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-validation-"));
+  const missingAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-missing-"));
+  const cooldownAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-cooldown-"));
   const validationManager = makeManager(validationAuthDir, [makeToken()]);
   const missingManager = makeManager(missingAuthDir, []);
   const cooldownManager = makeManager(cooldownAuthDir, [makeToken()]);
@@ -9384,7 +9441,7 @@ test("Claude native passthrough errors return OpenAI-style JSON", async (t) => {
 });
 
 test("Claude native passthrough requires messages arrays before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-messages-validation-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-messages-validation-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9452,7 +9509,7 @@ test("Claude native passthrough requires messages arrays before upstream", async
 });
 
 test("Claude native passthrough messages arrays must not be empty before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-empty-messages-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-empty-messages-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9506,7 +9563,7 @@ test("Claude native passthrough messages arrays must not be empty before upstrea
 });
 
 test("Claude native passthrough message items must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-message-items-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-message-items-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9588,7 +9645,7 @@ test("Claude native passthrough message items must be valid before upstream", as
 });
 
 test("Claude native passthrough requires model before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-missing-model-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-missing-model-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9640,7 +9697,7 @@ test("Claude native passthrough requires model before upstream", async (t) => {
 });
 
 test("Claude native passthrough model must be a non-empty string before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-invalid-model-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-invalid-model-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9694,7 +9751,7 @@ test("Claude native passthrough model must be a non-empty string before upstream
 });
 
 test("Claude native messages requires max_tokens before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-missing-max-tokens-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-missing-max-tokens-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9731,7 +9788,7 @@ test("Claude native messages requires max_tokens before upstream", async (t) => 
 });
 
 test("Claude native messages max_tokens must be a positive integer before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-invalid-max-tokens-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-invalid-max-tokens-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9772,7 +9829,7 @@ test("Claude native messages max_tokens must be a positive integer before upstre
 });
 
 test("Claude native messages stream must be a boolean before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-invalid-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-invalid-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: unknown[] = [];
   const restoreFetch = withMockedFetch(async (input) => {
@@ -9814,7 +9871,7 @@ test("Claude native messages stream must be a boolean before upstream", async (t
 });
 
 test("Claude native messages stream records failure when upstream stream ends before completion", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-truncated-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-truncated-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -9878,7 +9935,7 @@ test("Claude native messages stream records failure when upstream stream ends be
 });
 
 test("Claude native messages stream records success when upstream stream completes", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-complete-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-complete-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input) => {
     const url = String(input);
@@ -9941,7 +9998,7 @@ test("Claude native messages stream records success when upstream stream complet
 });
 
 test("Claude native count_tokens stream must be disabled before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-count-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-count-stream-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10015,7 +10072,7 @@ test("Claude native count_tokens stream must be disabled before upstream", async
 });
 
 test("Claude native count_tokens applies cloaking before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-count-cloaking-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-count-cloaking-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ body: any }> = [];
   const restoreFetch = withMockedFetch(async (_input, init) => {
@@ -10072,7 +10129,7 @@ test("Claude native count_tokens applies cloaking before upstream", async (t) =>
 });
 
 test("Claude native passthrough top-level params must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-top-level-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-top-level-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10191,7 +10248,7 @@ test("Claude native passthrough top-level params must be valid before upstream",
 });
 
 test("Claude native passthrough tools must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-tools-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10301,7 +10358,7 @@ test("Claude native passthrough tools must be valid before upstream", async (t) 
 });
 
 test("Claude native passthrough system must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-system-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-system-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10422,7 +10479,7 @@ test("Claude native passthrough system must be valid before upstream", async (t)
 });
 
 test("Claude native passthrough context_management must be valid before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-context-management-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-context-management-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; body: any }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10555,7 +10612,7 @@ test("Claude native passthrough context_management must be valid before upstream
 });
 
 test("Claude upstream requests use configured Anthropic-Beta header", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-claude-beta-header-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-claude-beta-header-"));
   const manager = makeManager(authDir, [makeToken()]);
   const calls: Array<{ url: string; headers: Record<string, string> }> = [];
   const restoreFetch = withMockedFetch(async (input, init) => {
@@ -10613,8 +10670,8 @@ test("Claude upstream requests use configured Anthropic-Beta header", async (t) 
 });
 
 test("Claude native passthrough upstream network errors return OpenAI-style JSON", async (t) => {
-  const messagesAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-messages-network-"));
-  const countAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-native-count-network-"));
+  const messagesAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-messages-network-"));
+  const countAuthDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-native-count-network-"));
   const messagesManager = makeManager(messagesAuthDir, [makeToken()]);
   const countManager = makeManager(countAuthDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async () => {
@@ -10666,7 +10723,7 @@ test("Claude native passthrough upstream network errors return OpenAI-style JSON
 });
 
 test("local /v1 rate limit is disabled by default", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-rate-limit-default-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-rate-limit-default-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, []);
   const server = await startApp(makeConfig(authDir), manager);
@@ -10689,7 +10746,7 @@ test("local /v1 rate limit is disabled by default", async (t) => {
 });
 
 test("local /v1 rate limit can be explicitly enabled", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-rate-limit-enabled-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-rate-limit-enabled-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, []);
   const server = await startApp(
@@ -10750,7 +10807,7 @@ test("local /v1 rate limit can be explicitly enabled", async (t) => {
 });
 
 test("local /v1 rate limit isolates buckets by authenticated API key", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-rate-limit-per-key-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-rate-limit-per-key-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, []);
   const config = makeConfigWithRateLimit(authDir, {
@@ -10797,8 +10854,8 @@ test("local /v1 rate limit isolates buckets by authenticated API key", async (t)
 });
 
 test("missing Codex auth only breaks Codex models and still allows Claude models", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-home-"));
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async (input, init) => {
     const url = String(input);
@@ -10858,7 +10915,7 @@ test("missing Codex auth only breaks Codex models and still allows Claude models
 });
 
 test("disabled Codex provider rejects Codex models without falling back to Claude", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async () => {
@@ -10898,7 +10955,7 @@ test("disabled Codex provider rejects Codex models without falling back to Claud
 });
 
 test("Codex models not listed in config are rejected", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   writeCodexAuth(authDir);
   const manager = makeManager(authDir, [makeToken()]);
   const restoreFetch = withMockedFetch(async () => {
@@ -10938,7 +10995,7 @@ test("Codex models not listed in config are rejected", async (t) => {
 });
 
 test("loads multiple Claude accounts and exposes each snapshot", (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-smoke-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-smoke-"));
   t.after(() => {
     fs.rmSync(authDir, { recursive: true, force: true });
   });

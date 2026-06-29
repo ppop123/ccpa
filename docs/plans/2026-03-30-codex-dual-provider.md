@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Extend `auth2api` into a single-instance, single-port proxy that serves both Claude OAuth and Codex OAuth models via `/v1/chat/completions`, `/v1/responses`, and `/v1/models`.
+**Goal:** Extend CCPA into a single-instance, single-port proxy that serves both Claude OAuth and Codex OAuth models via `/v1/chat/completions`, `/v1/responses`, and `/v1/models`.
 
 **Architecture:** Introduce a provider abstraction and route requests by model name. Keep Claude on the existing proxy path, add a dedicated Codex provider that reads `~/.codex/auth.json`, and aggregate provider status/models at the server layer.
 

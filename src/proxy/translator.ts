@@ -12,8 +12,16 @@ const MODEL_ALIASES: Record<string, string> = {
   "claude-haiku-4-5":        "claude-haiku-4-5-20251001",
 };
 
+const CLAUDE_MODELS_WITH_DEPRECATED_TEMPERATURE = new Set([
+  "claude-opus-4-8",
+]);
+
 export function resolveModel(model: string): string {
   return MODEL_ALIASES[model] ?? model;
+}
+
+export function shouldForwardClaudeTemperature(model: string): boolean {
+  return !CLAUDE_MODELS_WITH_DEPRECATED_TEMPERATURE.has(resolveModel(model));
 }
 
 // ── Reasoning effort → Claude thinking config ──
@@ -112,13 +120,16 @@ function convertTools(tools: any[]): any[] {
 
 export function openaiToClaude(body: any): any {
   const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 8192;
+  const model = resolveModel(body.model || "claude-sonnet-4-6");
   const claudeBody: any = {
-    model: resolveModel(body.model || "claude-sonnet-4-6"),
+    model,
     max_tokens: maxTokens,
     stream: !!body.stream,
   };
 
-  if (body.temperature !== undefined) claudeBody.temperature = body.temperature;
+  if (body.temperature !== undefined && shouldForwardClaudeTemperature(model)) {
+    claudeBody.temperature = body.temperature;
+  }
   if (body.top_p !== undefined) claudeBody.top_p = body.top_p;
   if (body.stop !== undefined && body.stop !== null) {
     claudeBody.stop_sequences = Array.isArray(body.stop) ? body.stop : [body.stop];

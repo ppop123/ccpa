@@ -142,7 +142,7 @@ function makeStreamResponse(chunks: string[]): Response {
 }
 
 test("Codex chat completions streams upstream SSE events as OpenAI chat chunks", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-stream-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -203,7 +203,7 @@ test("Codex chat completions streams upstream SSE events as OpenAI chat chunks",
 });
 
 test("Codex chat completions honors stream_options include_usage", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-options-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-stream-options-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -262,7 +262,7 @@ test("Codex chat completions honors stream_options include_usage", async (t) => 
 });
 
 test("Codex chat completions streams custom tool calls as OpenAI chat deltas", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-custom-tool-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-stream-custom-tool-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -303,7 +303,7 @@ test("Codex chat completions streams custom tool calls as OpenAI chat deltas", a
 });
 
 test("Codex chat completions streams legacy function_call deltas for legacy functions requests", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-legacy-function-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-stream-legacy-function-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -351,7 +351,7 @@ test("Codex chat completions streams legacy function_call deltas for legacy func
 });
 
 test("Codex chat completions streams image partials as markdown content chunks", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-stream-image-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-stream-image-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));

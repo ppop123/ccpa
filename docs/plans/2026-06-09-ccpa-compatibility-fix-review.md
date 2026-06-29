@@ -22,7 +22,7 @@ Everything else (Phases 2, 3, 5, 6 and the rate-limit position) is correct. Phas
 
 ## Verification baseline (all confirmed)
 
-Verified on `main` working tree of `/Users/wy/auth2api` (not the stale worktree under `.claude/worktrees/`).
+Verified on the `main` working tree (not the stale worktree under `.claude/worktrees/`).
 
 | Plan claim | Status | Evidence |
 |---|---|---|

@@ -259,7 +259,7 @@ Problem:
 
 Recommended order:
 
-1. Persist Claude account state in `~/.auth2api/state.json`.
+1. Persist Claude account state in `~/.ccpa/state.json`.
 2. Add a safe Codex 401 recovery behavior:
    - reload auth file after 401 if mtime changed;
    - return a clear relogin hint if unchanged;

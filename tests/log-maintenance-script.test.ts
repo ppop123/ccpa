@@ -50,7 +50,7 @@ test("ccpa log maintenance documents defaults and controls", async () => {
 });
 
 test("ccpa log maintenance redacts account identifiers and API keys in current logs", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-log-redact-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-log-redact-"));
   const logPath = path.join(tmpDir, "ccpa.stderr.log");
 
   t.after(() => {
@@ -82,7 +82,7 @@ test("ccpa log maintenance redacts account identifiers and API keys in current l
 });
 
 test("ccpa log maintenance copy-truncates oversized logs with redacted rotations", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-log-rotate-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-log-rotate-"));
   const logPath = path.join(tmpDir, "ccpa.stdout.log");
 
   t.after(() => {

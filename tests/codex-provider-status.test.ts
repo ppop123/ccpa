@@ -156,7 +156,7 @@ async function requestJson(options: {
 }
 
 test("CodexProvider lists configured models", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-provider-"));
   const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
   const provider = new CodexProvider(config);
 
@@ -167,8 +167,8 @@ test("CodexProvider lists configured models", () => {
 });
 
 test("CodexProvider reports unavailable when auth.json is missing", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-provider-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-home-"));
 
   try {
     const status = withHomeDir(tmpHome, () => {
@@ -190,8 +190,8 @@ test("CodexProvider reports unavailable when auth.json is missing", () => {
 });
 
 test("CodexProvider falls back to the default local Codex auth file", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-provider-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-home-"));
 
   try {
     const fallbackAuthFile = path.join(tmpHome, ".codex", "auth.json");
@@ -212,7 +212,7 @@ test("CodexProvider falls back to the default local Codex auth file", () => {
 });
 
 test("CodexProvider supports only configured models when enabled", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-provider-"));
   const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
   const provider = new CodexProvider(config);
 
@@ -221,7 +221,7 @@ test("CodexProvider supports only configured models when enabled", () => {
 });
 
 test("CodexProvider rejects all models when disabled", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-provider-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-provider-"));
   const config = {
     ...makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json")),
     codex: {
@@ -238,8 +238,8 @@ test("CodexProvider rejects all models when disabled", () => {
 });
 
 test("server exposes Claude and Codex models and provider status", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-server-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-home-"));
   const config = makeConfig(authDir, path.join(authDir, ".codex", "auth.json"));
   const manager = makeManager(authDir, [makeToken()]);
   const server = withHomeDir(tmpHome, () => startApp(config, manager));
@@ -269,7 +269,7 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
   });
 
   assert.equal(adminResp.status, 200);
-  assert.equal(adminResp.body.server.service, "auth2api");
+  assert.equal(adminResp.body.server.service, "ccpa");
   assert.equal(adminResp.body.server.version, PACKAGE_VERSION);
   assert.match(adminResp.body.server.started_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(typeof adminResp.body.server.uptime_ms, "number");
@@ -285,8 +285,8 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
 });
 
 test("public health exposes runtime identity without provider details", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-health-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-health-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-health-home-"));
   const buildInfoPath = path.join(authDir, "build-info.json");
   fs.writeFileSync(
     buildInfoPath,
@@ -322,7 +322,7 @@ test("public health exposes runtime identity without provider details", async (t
 
   assert.equal(healthResp.status, 200);
   assert.equal(healthResp.body.status, "ok");
-  assert.equal(healthResp.body.service, "auth2api");
+  assert.equal(healthResp.body.service, "ccpa");
   assert.equal(healthResp.body.version, PACKAGE_VERSION);
   assert.match(healthResp.body.started_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(typeof healthResp.body.uptime_ms, "number");
@@ -338,8 +338,8 @@ test("public health exposes runtime identity without provider details", async (t
 });
 
 test("server does not expose default Claude models when claude.models is explicit empty", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-empty-claude-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-empty-claude-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-server-empty-claude-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-home-empty-claude-"));
   const config = {
     ...makeConfig(authDir, path.join(authDir, ".codex", "auth.json")),
     claude: { models: [], "beta-header": "test-beta" },
@@ -424,8 +424,8 @@ test("server does not expose default Claude models when claude.models is explici
 });
 
 test("admin status shows login hints for unavailable providers", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-server-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-server-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-home-"));
   const fallbackAuthFile = path.join(tmpHome, ".codex", "auth.json");
   writeCodexAuth(fallbackAuthFile);
 

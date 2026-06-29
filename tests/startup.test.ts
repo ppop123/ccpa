@@ -82,8 +82,8 @@ function withHomeDir<T>(homeDir: string, fn: () => T): T {
 }
 
 test("allows startup when Claude is missing but Codex auth is available", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-home-"));
 
   try {
     writeCodexAuth(authDir);
@@ -105,7 +105,7 @@ test("redacts proxy credentials in startup logs", () => {
 });
 
 test("startup proxy configuration falls back to LaunchAgent proxy env", (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-proxy-plist-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-proxy-plist-"));
   const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
   fs.writeFileSync(
     plistPath,
@@ -154,8 +154,8 @@ test("startup proxy configuration falls back to LaunchAgent proxy env", (t) => {
 });
 
 test("rejects startup when neither Claude nor Codex auth is available", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-home-"));
 
   try {
     const manager = loadManager(authDir);
@@ -168,8 +168,8 @@ test("rejects startup when neither Claude nor Codex auth is available", () => {
 });
 
 test("allows startup when Claude auth is available even if Codex auth is missing", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-home-"));
 
   try {
     writeClaudeToken(authDir);
@@ -183,8 +183,8 @@ test("allows startup when Claude auth is available even if Codex auth is missing
 });
 
 test("rejects startup when Codex auth exists but no Codex models are configured", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-startup-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-home-"));
 
   try {
     writeCodexAuth(authDir);

@@ -1,7 +1,7 @@
 import { Request, Response as ExpressResponse } from "express";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
-import { AccountFailureKind, AccountManager } from "../accounts/manager";
+import { AccountManager } from "../accounts/manager";
 import { setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
@@ -9,16 +9,10 @@ import { applyCloaking } from "./cloaking";
 import { callClaudeAPI, callClaudeCountTokens } from "./claude-api";
 import { readClaudeJsonResponse } from "./upstream-json";
 import { sendUnavailableClaudeAccount, setClaudeCooldownRetryAfter } from "./account-availability";
+import { classifyAccountFailure } from "./upstream-failures";
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-
-function classifyFailure(status: number): AccountFailureKind {
-  if (status === 429) return "rate_limit";
-  if (status === 401) return "auth";
-  if (status === 403) return "forbidden";
-  return "server";
-}
 
 interface ClaudeStreamCompletionState {
   buffer: string;
@@ -657,7 +651,10 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
           }
           manager.recordFailure(account.email, "auth");
         } else {
-          manager.recordFailure(account.email, classifyFailure(lastStatus));
+          const failureKind = classifyAccountFailure(lastStatus);
+          if (failureKind) {
+            manager.recordFailure(account.email, failureKind);
+          }
         }
         if (!RETRYABLE_STATUSES.has(lastStatus)) break;
         if (attempt < MAX_RETRIES - 1) {
@@ -789,7 +786,10 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
           }
           manager.recordFailure(account.email, "auth");
         } else {
-          manager.recordFailure(account.email, classifyFailure(lastStatus));
+          const failureKind = classifyAccountFailure(lastStatus);
+          if (failureKind) {
+            manager.recordFailure(account.email, failureKind);
+          }
         }
 
         if (!RETRYABLE_STATUSES.has(lastStatus)) break;

@@ -41,7 +41,7 @@ test("release readiness help documents local hygiene checks", async () => {
 });
 
 test("release readiness fails when transient artifacts are visible in git status", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-transient-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-transient-"));
   const statusFile = writeStatus(
     tmpDir,
     [
@@ -69,7 +69,7 @@ test("release readiness fails when transient artifacts are visible in git status
 });
 
 test("release readiness passes with dirty candidate changes when no transient artifacts are visible", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-candidate-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-candidate-"));
   const statusFile = writeStatus(
     tmpDir,
     [
@@ -97,7 +97,7 @@ test("release readiness passes with dirty candidate changes when no transient ar
 });
 
 test("release readiness warns about ignored transient artifacts without failing release", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-ignored-transient-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-ignored-transient-"));
   const statusFile = writeStatus(
     tmpDir,
     [
@@ -125,7 +125,7 @@ test("release readiness warns about ignored transient artifacts without failing 
 });
 
 test("release readiness emits a JSON candidate manifest grouped by review bucket", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-json-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-json-"));
   const statusFile = writeStatus(
     tmpDir,
     [
@@ -183,7 +183,7 @@ test("release readiness emits a JSON candidate manifest grouped by review bucket
 });
 
 test("release readiness can list candidate paths under each review bucket", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-list-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-list-"));
   const statusFile = writeStatus(
     tmpDir,
     [
@@ -209,7 +209,7 @@ test("release readiness can list candidate paths under each review bucket", asyn
 });
 
 test("release readiness can write a handoff JSON manifest to an explicit path", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-readiness-write-json-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-readiness-write-json-"));
   const statusFile = writeStatus(
     tmpDir,
     [

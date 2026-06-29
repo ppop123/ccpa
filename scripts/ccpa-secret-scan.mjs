@@ -104,7 +104,7 @@ function isSkippedCandidatePath(relativePath) {
     normalized.startsWith("node_modules/") ||
     normalized.startsWith(".git/") ||
     normalized.startsWith(".claude/") ||
-    normalized.startsWith(".auth2api/") ||
+    normalized.startsWith(".ccpa/") ||
     normalized.startsWith("coverage/")
   );
 }
