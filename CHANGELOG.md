@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.0.1 - 2026-06-29
+
+This patch release prepares CCPA for the public GitHub repository and refreshes
+the local release surface after the rename cleanup.
+
+### Highlights
+
+- Updated the package identity, runtime service name, default auth directory,
+  README files, operations guide, and release tooling around the public `ccpa`
+  project name.
+- Documented the experimental SuperGrok OAuth provider path and keeps Grok
+  visible in `/admin/accounts`, `/v1/models`, and the `/monitor` Provider
+  Status card when configured.
+- Hardened monitor freshness by serving `/monitor` and its admin JSON data with
+  no-store caching semantics.
+- Preserved the legacy LaunchAgent proxy-environment fallback for local upgrade
+  compatibility, while keeping tracked public docs and source free of the old
+  project-name string.
+- Cleaned stale local worktree metadata and verified that the live service runs
+  from `/Users/wy/ccpa`.
+
+### Validation
+
+- `npm run typecheck`
+- `npm run test:unit`
+- `npm run test:smoke`
+- `npm run test:ops`
+- `npm run secrets:scan`
+- `npm run security:posture`
+- `npm run release:readiness`
+- `npm run release:verify -- --require-provider-status ok --require-build-commit <candidate> --require-external-healthcheck-dir /Users/wy/ccpa`
+
+### Upgrade notes
+
+- Fresh installs should clone `https://github.com/ppop123/ccpa` and use
+  `auth-dir: "~/.ccpa"`.
+- Existing local installs from the pre-public checkout should rebuild from a
+  clean commit, update launchd wrappers to point at the new checkout directory,
+  and rerun `npm run release:verify` before relying on the service.
+- If proxy variables still live in an older LaunchAgent plist, CCPA will read
+  them as a compatibility fallback, but new installs should use the current
+  `com.wy.ccpa.plist` naming.
+
 ## v2.0.0 - 2026-06-23
 
 This is the first stable self-use CCPA release after the June stabilization

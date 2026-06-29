@@ -25,7 +25,7 @@ The public health endpoint returns only non-sensitive runtime identity:
 {
   "status": "ok",
   "service": "ccpa",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "started_at": "2026-06-29T00:00:00.000Z",
   "uptime_ms": 1234
 }
@@ -64,6 +64,33 @@ codex:
 
 Local rate limiting is disabled by default for single-operator workflows. Enable
 `rate-limit.enabled: true` before exposing the service to untrusted clients.
+
+## Upgrade Notes
+
+For fresh public installs, clone the public repository and start from
+`config.example.yaml`:
+
+```bash
+git clone https://github.com/ppop123/ccpa
+cd ccpa
+cp config.example.yaml config.yaml
+```
+
+For local installs that predate the public checkout name, migrate the working
+directory, launchd wrapper, and external healthcheck wrapper to the `ccpa`
+checkout path, then rebuild and verify:
+
+```bash
+npm run build
+npm run release:verify -- \
+  --require-provider-status ok \
+  --require-build-commit "$(git rev-parse HEAD)" \
+  --require-external-healthcheck-dir "$(pwd)"
+```
+
+The runtime keeps a read-only compatibility fallback for proxy variables stored
+in an older LaunchAgent plist. New installs should use the current
+`com.wy.ccpa.plist` naming.
 
 ## Authentication
 

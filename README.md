@@ -72,6 +72,12 @@ npm run build
 cp config.example.yaml config.yaml
 ```
 
+Upgrade note for pre-public local checkouts: rebuild from a clean commit, point
+your launchd wrapper and healthcheck wrapper at the `ccpa` checkout directory,
+and rerun `npm run release:verify` before relying on the live process. CCPA still
+reads proxy variables from an older LaunchAgent plist as a compatibility
+fallback, but new installs should use the current `com.wy.ccpa.plist` naming.
+
 ## 5-minute setup
 
 1. Put a real API key in `config.yaml`.

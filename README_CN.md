@@ -70,6 +70,11 @@ npm run build
 cp config.example.yaml config.yaml
 ```
 
+从公开发布前的本机 checkout 升级时：先从干净 commit 重新 build，把 launchd wrapper
+和 healthcheck wrapper 都指向 `ccpa` checkout 目录，再跑 `npm run release:verify`
+确认 live 进程可用。CCPA 仍会兼容读取旧 LaunchAgent plist 里的代理环境变量，但新安装
+建议使用当前的 `com.wy.ccpa.plist` 命名。
+
 ## 5 分钟跑起来
 
 1. 在 `config.yaml` 里填一个正式 API key。
