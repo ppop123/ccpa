@@ -500,7 +500,7 @@ export function createServer(config: Config, manager: AccountManager): express.A
     const readinessProviders = config.grok?.enabled
       ? [claudeStatus, codexStatus, grokStatus]
       : [claudeStatus, codexStatus];
-    res.json({
+    res.set("Cache-Control", "no-store").json({
       server: serverReadiness(readinessProviders),
       accounts: manager.getSnapshots(),
       account_count: manager.accountCount,
@@ -512,12 +512,12 @@ export function createServer(config: Config, manager: AccountManager): express.A
   });
 
   app.get("/admin/usage", (_req, res) => {
-    res.json(usageTracker.snapshot());
+    res.set("Cache-Control", "no-store").json(usageTracker.snapshot());
   });
 
   app.get("/admin/usage/recent", (req, res) => {
     const limit = Number(req.query.limit);
-    res.json(usageTracker.recent(Number.isFinite(limit) ? limit : undefined));
+    res.set("Cache-Control", "no-store").json(usageTracker.recent(Number.isFinite(limit) ? limit : undefined));
   });
 
   app.use("/admin", (req, res) => {

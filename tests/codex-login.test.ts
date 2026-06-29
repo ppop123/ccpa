@@ -9,6 +9,17 @@ import { runCodexLogin } from "../src/auth/codex-login";
 
 class MockChildProcess extends EventEmitter {}
 
+async function withHomeDir<T>(homeDir: string, fn: () => Promise<T>): Promise<T> {
+  const originalHome = process.env.HOME;
+  process.env.HOME = homeDir;
+
+  try {
+    return await fn();
+  } finally {
+    process.env.HOME = originalHome;
+  }
+}
+
 test("runCodexLogin reports a clear install hint when codex CLI is missing", async () => {
   await assert.rejects(
     runCodexLogin({
@@ -110,6 +121,52 @@ test("runCodexLogin fills proxy env from LaunchAgent plist when shell env is mis
       return child as any;
     },
   } as any);
+});
+
+test("runCodexLogin discovers legacy LaunchAgent plist for proxy env fallback", async (t) => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-login-legacy-plist-home-"));
+  const launchAgentsDir = path.join(tmpHome, "Library", "LaunchAgents");
+  const legacyPlistName = ["com", ["auth2", "api"].join(""), "plist"].join(".");
+  const plistPath = path.join(launchAgentsDir, legacyPlistName);
+  const authFilePath = path.join(tmpHome, "auth.json");
+  fs.mkdirSync(launchAgentsDir, { recursive: true });
+  fs.writeFileSync(authFilePath, "{}");
+  fs.writeFileSync(
+    plistPath,
+    [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0">',
+      "<dict>",
+      "  <key>EnvironmentVariables</key>",
+      "  <dict>",
+      "    <key>HTTPS_PROXY</key>",
+      "    <string>http://127.0.0.1:6152</string>",
+      "  </dict>",
+      "</dict>",
+      "</plist>",
+    ].join("\n")
+  );
+
+  t.after(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  await withHomeDir(tmpHome, () =>
+    runCodexLogin({
+      authFilePath,
+      env: { PATH: "/usr/bin" },
+      existsSync: (candidatePath) => candidatePath === authFilePath,
+      spawn: (_command, _args, options) => {
+        assert.equal((options as any).env.HTTPS_PROXY, "http://127.0.0.1:6152");
+
+        const child = new MockChildProcess();
+        process.nextTick(() => {
+          child.emit("exit", 0);
+        });
+        return child as any;
+      },
+    } as any)
+  );
 });
 
 test("runCodexLogin keeps explicit shell proxy env over LaunchAgent plist", async (t) => {

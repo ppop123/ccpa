@@ -544,6 +544,7 @@ export function renderMonitorPage(): string {
 
         async function fetchJson(path, apiKey) {
           var response = await fetch(path, {
+            cache: "no-store",
             headers: {
               Authorization: "Bearer " + apiKey
             }

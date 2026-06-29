@@ -208,8 +208,20 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /refresh failures/i);
   assert.match(pageResp.rawBody, /next refresh/i);
   assert.match(pageResp.rawBody, /renderProviderCard\("Grok", accounts\.grok \|\|/);
+  assert.match(pageResp.rawBody, /cache:\s*"no-store"/);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
   assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
+
+  for (const path of ["/admin/accounts", "/admin/usage", "/admin/usage/recent?limit=1"]) {
+    const adminResp = await requestJson({
+      server,
+      method: "GET",
+      path,
+      headers: { Authorization: "Bearer test-key" },
+    });
+    assert.equal(adminResp.status, 200);
+    assert.match(String(adminResp.headers["cache-control"] || ""), /no-store/i);
+  }
 });
 
 test("admin usage endpoints expose provider, endpoint, and model aggregates", async (t) => {
