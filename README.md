@@ -14,8 +14,6 @@ It is built for one machine, one operator, and one clear use case:
 
 It is intentionally not a multi-account pool, billing platform, or generic API gateway.
 
-The repository is called `ccpa`. Some runtime logs and config paths still use the older internal name `auth2api`.
-
 ## Documentation
 
 - [Documentation map](docs/README.md): where to find current usage docs,
@@ -87,7 +85,7 @@ Minimal config:
 host: ""
 port: 8317
 
-auth-dir: "~/.auth2api"
+auth-dir: "~/.ccpa"
 
 api-keys:
   - "sk-replace-with-a-long-random-key"
@@ -114,9 +112,9 @@ grok:
 debug: "off"
 ```
 
-For the full config surface, see [config.example.yaml](/Users/wy/auth2api/config.example.yaml).
+For the full config surface, see [config.example.yaml](config.example.yaml).
 
-Local `/v1` rate limiting is disabled by default. If you want it, set `rate-limit.enabled: true` and tune `window-ms` / `max-requests` in [config.example.yaml](/Users/wy/auth2api/config.example.yaml). When enabled, buckets are isolated by authenticated API key, so one local client key cannot consume another key's quota from the same IP. Local rate-limit 429s include `Retry-After` and `X-RateLimit-*`; Claude account cooldown 429s and refresh-backoff 503s include `Retry-After`.
+Local `/v1` rate limiting is disabled by default. If you want it, set `rate-limit.enabled: true` and tune `window-ms` / `max-requests` in [config.example.yaml](config.example.yaml). When enabled, buckets are isolated by authenticated API key, so one local client key cannot consume another key's quota from the same IP. Local rate-limit 429s include `Retry-After` and `X-RateLimit-*`; Claude account cooldown 429s and refresh-backoff 503s include `Retry-After`.
 
 Start the server:
 
@@ -511,7 +509,7 @@ docker build -t ccpa .
 
 docker run -d \
   -p 8317:8317 \
-  -v ~/.auth2api:/data \
+  -v ~/.ccpa:/data \
   -v ~/.codex/auth.json:/root/.codex/auth.json:ro \
   -v ./config.yaml:/config/config.yaml \
   ccpa
@@ -535,7 +533,6 @@ This test suite uses mocked upstream responses and does not call real Claude or 
 
 ## Inspired by
 
-- [auth2api](https://github.com/AmazingAng/auth2api)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 - [sub2api](https://github.com/Wei-Shaw/sub2api)
 

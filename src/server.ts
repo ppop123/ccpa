@@ -145,7 +145,7 @@ function readRuntimeBuildInfo() {
 function runtimeIdentity() {
   const build = readRuntimeBuildInfo();
   return {
-    service: "auth2api",
+    service: "ccpa",
     version: PACKAGE_VERSION,
     started_at: SERVER_STARTED_AT,
     uptime_ms: Math.max(0, Date.now() - SERVER_STARTED_AT_MS),

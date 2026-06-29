@@ -160,7 +160,7 @@ test("upstream matrix dry-run accepts explicit model overrides", async () => {
 });
 
 test("upstream matrix apply runs text generation checks through local CCPA", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-apply-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-upstream-matrix-apply-"));
   const { server, requests } = await startMatrixServer();
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -204,7 +204,7 @@ test("upstream matrix apply runs text generation checks through local CCPA", asy
 });
 
 test("upstream matrix apply rejects text checks that do not return expected ok", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-text-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-upstream-matrix-text-"));
   const { server } = await startMatrixServer({ responseText: "not ok" });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -224,7 +224,7 @@ test("upstream matrix apply rejects text checks that do not return expected ok",
 });
 
 test("upstream matrix includes image generation only when explicitly requested", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-image-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-upstream-matrix-image-"));
   const { server, requests } = await startMatrixServer();
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -244,7 +244,7 @@ test("upstream matrix includes image generation only when explicitly requested",
 });
 
 test("upstream matrix failures are redacted", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-upstream-matrix-fail-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-upstream-matrix-fail-"));
   const { server } = await startMatrixServer({ failPath: "/v1/responses", apiKey: "sk-secret1234567890" });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir, "sk-secret1234567890");

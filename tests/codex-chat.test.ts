@@ -153,7 +153,7 @@ function makeStreamResponse(chunks: string[]): Response {
 }
 
 test("Codex chat completions sends bearer token upstream and canonicalizes chat messages", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -287,7 +287,7 @@ test("Codex chat completions sends bearer token upstream and canonicalizes chat 
 });
 
 test("Codex chat completions preserves response.output_text.done text without deltas", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-output-text-done-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-output-text-done-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -326,7 +326,7 @@ test("Codex chat completions preserves response.output_text.done text without de
 });
 
 test("Codex chat completions adds image tool for explicit image_generation tool_choice", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-image-choice-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-image-choice-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -371,7 +371,7 @@ test("Codex chat completions adds image tool for explicit image_generation tool_
 });
 
 test("Codex chat completions does not auto-enable image tool when response_format requests text", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-response-format-no-image-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-response-format-no-image-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -420,7 +420,7 @@ test("Codex chat completions does not auto-enable image tool when response_forma
 });
 
 test("Codex chat completions applies configured stream timeout to upstream fetch", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-timeout-config-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-timeout-config-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const config = makeConfig(authDir, authFile);
@@ -473,7 +473,7 @@ test("Codex chat completions applies configured stream timeout to upstream fetch
 });
 
 test("Codex chat completions converts system messages to developer role", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-system-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-system-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -523,7 +523,7 @@ test("Codex chat completions converts system messages to developer role", async 
 });
 
 test("Codex chat completions uses configured default store", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-store-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-store-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile, true));
@@ -566,7 +566,7 @@ test("Codex chat completions uses configured default store", async (t) => {
 });
 
 test("Codex chat completions returns OpenAI-style validation errors", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-validation-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-validation-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
   let upstreamCalls = 0;
@@ -1622,7 +1622,7 @@ test("Codex chat completions returns OpenAI-style validation errors", async (t) 
 });
 
 test("Codex chat completions rejects invalid tool_choice before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-tool-choice-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-tool-choice-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
   let upstreamCalls = 0;
@@ -1665,7 +1665,7 @@ test("Codex chat completions rejects invalid tool_choice before auth and upstrea
 });
 
 test("Codex chat completions maps custom tools and tool_choice to Responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-custom-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-custom-tools-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1723,7 +1723,7 @@ test("Codex chat completions maps custom tools and tool_choice to Responses", as
 });
 
 test("Codex chat completions maps legacy functions and function_call to Responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-legacy-functions-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-legacy-functions-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1784,7 +1784,7 @@ test("Codex chat completions maps legacy functions and function_call to Response
 });
 
 test("Codex chat completions returns legacy function_call for legacy functions requests", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-legacy-function-response-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-legacy-function-response-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1832,7 +1832,7 @@ test("Codex chat completions returns legacy function_call for legacy functions r
 });
 
 test("Codex chat completions maps legacy function call messages to Responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-legacy-function-messages-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-legacy-function-messages-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1898,7 +1898,7 @@ test("Codex chat completions maps legacy function call messages to Responses", a
 });
 
 test("Codex chat completions maps allowed_tools tool_choice to Responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-allowed-tools-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-allowed-tools-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1976,7 +1976,7 @@ test("Codex chat completions maps allowed_tools tool_choice to Responses", async
 });
 
 test("Codex chat completions round-trips custom tool calls through Responses", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-custom-roundtrip-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-custom-roundtrip-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2041,7 +2041,7 @@ test("Codex chat completions round-trips custom tool calls through Responses", a
 });
 
 test("Codex chat completions retries once with refreshed auth after upstream 401", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-401-refresh-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-401-refresh-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "stale-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2094,7 +2094,7 @@ test("Codex chat completions retries once with refreshed auth after upstream 401
 });
 
 test("Codex chat completions returns upstream invalid response for invalid JSON", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-invalid-json-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-invalid-json-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2134,7 +2134,7 @@ test("Codex chat completions returns upstream invalid response for invalid JSON"
 });
 
 test("Codex chat completions returns upstream network error when upstream SSE is truncated", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-truncated-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-truncated-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2174,7 +2174,7 @@ test("Codex chat completions returns upstream network error when upstream SSE is
 });
 
 test("Codex chat completions preserves upstream SSE error events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-sse-error-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-sse-error-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2213,7 +2213,7 @@ test("Codex chat completions preserves upstream SSE error events", async (t) => 
 });
 
 test("Codex chat completions treats response.incomplete as a terminal length finish", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-incomplete-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-incomplete-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2253,7 +2253,7 @@ test("Codex chat completions treats response.incomplete as a terminal length fin
 });
 
 test("Codex chat completions preserves response.failed details", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-failed-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-failed-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2292,7 +2292,7 @@ test("Codex chat completions preserves response.failed details", async (t) => {
 });
 
 test("Codex chat completions returns upstream timeout when upstream fetch times out", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-timeout-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-timeout-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2331,7 +2331,7 @@ test("Codex chat completions returns upstream timeout when upstream fetch times 
 });
 
 test("Codex chat completions returns upstream network error when upstream fetch fails", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-network-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-network-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2371,8 +2371,8 @@ test("Codex chat completions returns upstream network error when upstream fetch 
 });
 
 test("Codex chat completions returns controlled error when auth file is missing", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-missing-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-missing-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
 
   const restoreFetch = global.fetch;
@@ -2411,8 +2411,8 @@ test("Codex chat completions returns controlled error when auth file is missing"
 });
 
 test("Codex chat completions returns controlled error when auth file is malformed", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-malformed-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-chat-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-malformed-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   fs.writeFileSync(

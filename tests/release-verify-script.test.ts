@@ -147,7 +147,7 @@ test("release verify help documents read-only aggregate gates", async () => {
 });
 
 test("release verify runs release gates in a safe deterministic order", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-ok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-ok-"));
   const { repoDir, logPath, bins } = makeFakeTools(tmpDir);
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 
@@ -210,7 +210,7 @@ test("release verify runs release gates in a safe deterministic order", async (t
 });
 
 test("release verify can require strict provider readiness", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-provider-status-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-provider-status-"));
   const { repoDir, logPath, bins } = makeFakeTools(tmpDir);
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 
@@ -240,7 +240,7 @@ test("release verify can require strict provider readiness", async (t) => {
 });
 
 test("release verify can require a runtime build commit", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-build-commit-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-build-commit-"));
   const { repoDir, logPath, bins } = makeFakeTools(tmpDir);
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 
@@ -270,7 +270,7 @@ test("release verify can require a runtime build commit", async (t) => {
 });
 
 test("release verify can require the external healthcheck wrapper dir", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-healthcheck-dir-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-healthcheck-dir-"));
   const { repoDir, logPath, bins } = makeFakeTools(tmpDir);
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 
@@ -300,7 +300,7 @@ test("release verify can require the external healthcheck wrapper dir", async (t
 });
 
 test("release verify keeps CCPA runtime env out of test steps", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-env-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-env-"));
   const { repoDir, logPath, bins } = makeEnvLoggingFakeTools(tmpDir);
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 
@@ -341,7 +341,7 @@ test("release verify keeps CCPA runtime env out of test steps", async (t) => {
 });
 
 test("release verify fails fast and redacts command output", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-release-verify-fail-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-release-verify-fail-"));
   const { repoDir, logPath, bins } = makeFakeTools(tmpDir, "run rollout:preflight");
   const [npmBin, gitBin, nodeBin, bashBin] = bins;
 

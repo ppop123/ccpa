@@ -125,7 +125,7 @@ function assertRuntimeIdentity(health) {
   const missing =
     !health ||
     health.status !== "ok" ||
-    health.service !== "auth2api" ||
+    health.service !== "ccpa" ||
     typeof health.version !== "string" ||
     health.version.length === 0 ||
     typeof health.started_at !== "string" ||

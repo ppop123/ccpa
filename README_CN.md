@@ -14,8 +14,6 @@ Claude + Codex + Grok Proxy API
 
 它有简单的 Claude 备用账号池，但不是计费平台、多租户服务，也不是通用网关。
 
-仓库名是 `ccpa`，但运行时日志和部分配置路径里仍然会看到旧的内部名字 `auth2api`。
-
 ## 文档
 
 - [文档地图](docs/README.md)：快速判断当前使用文档、运维 runbook、历史计划和 handoff 笔记分别在哪里。
@@ -85,7 +83,7 @@ cp config.example.yaml config.yaml
 host: ""
 port: 8317
 
-auth-dir: "~/.auth2api"
+auth-dir: "~/.ccpa"
 
 api-keys:
   - "sk-replace-with-a-long-random-key"
@@ -112,9 +110,9 @@ grok:
 debug: "off"
 ```
 
-完整配置可以直接看 [config.example.yaml](/Users/wy/auth2api/config.example.yaml)。
+完整配置可以直接看 [config.example.yaml](config.example.yaml)。
 
-本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](/Users/wy/auth2api/config.example.yaml) 里调整。启用后按已鉴权 API key 隔离 bucket，同一个 IP 下某个客户端 key 超限不会连带消耗另一个 key 的额度。
+本地 `/v1` 限流默认关闭。只有在你明确设置 `rate-limit.enabled: true` 时才会启用，窗口和阈值可在 [config.example.yaml](config.example.yaml) 里调整。启用后按已鉴权 API key 隔离 bucket，同一个 IP 下某个客户端 key 超限不会连带消耗另一个 key 的额度。
 
 启动：
 
@@ -458,7 +456,7 @@ docker build -t ccpa .
 
 docker run -d \
   -p 8317:8317 \
-  -v ~/.auth2api:/data \
+  -v ~/.ccpa:/data \
   -v ~/.codex/auth.json:/root/.codex/auth.json:ro \
   -v ./config.yaml:/config/config.yaml \
   ccpa
@@ -482,7 +480,6 @@ npm run test:smoke
 
 ## Inspired by
 
-- [auth2api](https://github.com/AmazingAng/auth2api)
 - [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 - [sub2api](https://github.com/Wei-Shaw/sub2api)
 

@@ -782,9 +782,14 @@ export function renderMonitorPage(): string {
           document.getElementById("metric-recent-count").textContent = formatNumber(usage.recentCount);
           document.getElementById("metric-generated-at").textContent = "usage snapshot " + formatDate(usage.generatedAt);
 
-          document.getElementById("provider-status").innerHTML =
-            renderProviderCard("Claude", accounts.claude) +
-            renderProviderCard("Codex", accounts.codex);
+          var providerCards = [
+            renderProviderCard("Claude", accounts.claude),
+            renderProviderCard("Codex", accounts.codex)
+          ];
+          if (accounts.grok) {
+            providerCards.push(renderProviderCard("Grok", accounts.grok));
+          }
+          document.getElementById("provider-status").innerHTML = providerCards.join("");
 
           var accountCards = (accounts.accounts || []).map(renderAccountCard);
           document.getElementById("account-status").innerHTML = accountCards.length

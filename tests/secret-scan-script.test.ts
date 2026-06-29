@@ -45,7 +45,7 @@ test("secret scan help documents read-only default release scope", async () => {
 });
 
 test("secret scan passes placeholders and redacted token examples", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-placeholders-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-placeholders-"));
   const repoDir = path.join(tmpDir, "repo");
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -73,7 +73,7 @@ test("secret scan passes placeholders and redacted token examples", async (t) =>
 });
 
 test("secret scan fails on real-looking OpenAI API keys and redacts output", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-key-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-key-"));
   const repoDir = path.join(tmpDir, "repo");
   const leakedKey = "sk-live_abcdefghijklmnopqrstuvwxyz1234567890";
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -90,7 +90,7 @@ test("secret scan fails on real-looking OpenAI API keys and redacts output", asy
 });
 
 test("secret scan fails on real-looking OAuth token JSON and redacts output", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-token-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-token-"));
   const repoDir = path.join(tmpDir, "repo");
   const leakedToken = "ya29.this-is-a-long-real-looking-token-value";
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -109,7 +109,7 @@ test("secret scan fails on real-looking OAuth token JSON and redacts output", as
 });
 
 test("secret scan ignores tests directory by default", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-tests-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-tests-"));
   const repoDir = path.join(tmpDir, "repo");
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -124,8 +124,26 @@ test("secret scan ignores tests directory by default", async (t) => {
   assert.match(result.stdout, /secret_scan: yes/);
 });
 
+test("secret scan ignores local ccpa auth directory by default", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-auth-dir-"));
+  const repoDir = path.join(tmpDir, "repo");
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  initGitRepo(repoDir);
+  writeFile(repoDir, ".ccpa/auth.json", JSON.stringify({
+    access_token: "ya29.this-is-a-long-real-looking-token-value",
+    refresh_token: "ya29.this-is-another-long-real-looking-token-value",
+  }, null, 2));
+  writeFile(repoDir, "README.md", "No release-facing secrets here.\n");
+
+  const result = await runSecretScan(["--repo-dir", repoDir]);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /secret_scan: yes/);
+});
+
 test("secret scan includes git candidate files outside default paths", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-git-candidates-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-git-candidates-"));
   const repoDir = path.join(tmpDir, "repo");
   const leakedKey = "sk-live_abcdefghijklmnopqrstuvwxyz1234567890";
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -141,7 +159,7 @@ test("secret scan includes git candidate files outside default paths", async (t)
 });
 
 test("secret scan can scan an explicit path outside the default scope", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-secret-scan-explicit-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-secret-scan-explicit-"));
   const repoDir = path.join(tmpDir, "repo");
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 

@@ -96,7 +96,7 @@ async function startServer(): Promise<void> {
   const port = config.port;
 
   app.listen(port, host, () => {
-    console.log(`auth2api running on http://${host}:${port}`);
+    console.log(`ccpa running on http://${host}:${port}`);
     console.log(`Endpoints:`);
     console.log(`  POST /v1/chat/completions`);
     console.log(`  GET  /v1/models`);

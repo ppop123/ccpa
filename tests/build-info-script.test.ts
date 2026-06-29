@@ -20,7 +20,7 @@ function runScript(args: string[]): Promise<{ code: number; stdout: string; stde
 }
 
 test("build info script writes git revision metadata", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-build-info-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-build-info-"));
   const outPath = path.join(tmpDir, "nested", "build-info.json");
 
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));

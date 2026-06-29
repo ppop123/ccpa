@@ -33,7 +33,7 @@ async function startContractServer(options: ContractServerOptions = {}): Promise
     if (req.url === "/health") {
       sendJson(200, {
         status: "ok",
-        service: "auth2api",
+        service: "ccpa",
         version: "1.1.0",
         started_at: "2026-06-18T00:00:00.000Z",
         uptime_ms: 1234,
@@ -71,7 +71,7 @@ async function startContractServer(options: ContractServerOptions = {}): Promise
     if (req.url === "/admin/accounts" && req.method === "GET") {
       sendJson(200, {
         server: {
-          service: "auth2api",
+          service: "ccpa",
           version: "1.1.0",
           started_at: "2026-06-18T00:00:00.000Z",
           uptime_ms: 1234,
@@ -245,7 +245,7 @@ test("contract check help documents no-upstream OpenAI compatibility checks", as
 });
 
 test("contract check verifies low-cost protocol contracts without leaking API keys", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-contract-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-contract-"));
   const server = await startContractServer();
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
@@ -277,7 +277,7 @@ test("contract check verifies low-cost protocol contracts without leaking API ke
 });
 
 test("contract check fails loudly and redacts API keys when a contract breaks", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-contract-broken-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-contract-broken-"));
   const server = await startContractServer({ brokenUnauthenticatedModels: true, leakApiKeyInBrokenResponse: true });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);

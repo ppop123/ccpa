@@ -6,8 +6,33 @@ import path from "node:path";
 
 import { loadConfig } from "../src/config";
 
+test("loadConfig uses ccpa auth dir for new default configs", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-default-auth-dir-"));
+  const configPath = path.join(tmpDir, "config.yaml");
+
+  try {
+    fs.writeFileSync(
+      configPath,
+      [
+        "api-keys:",
+        "  - sk-test-key",
+        "codex:",
+        "  enabled: false",
+        "  auth-file: ~/.codex/auth.json",
+        "  models: []",
+      ].join("\n")
+    );
+
+    const config = loadConfig(configPath);
+
+    assert.equal(config["auth-dir"], "~/.ccpa");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("loadConfig normalizes malformed api-keys before returning config", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-api-keys-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-api-keys-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -35,7 +60,7 @@ test("loadConfig normalizes malformed api-keys before returning config", () => {
 });
 
 test("loadConfig normalizes timeout values to positive integers", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-timeouts-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-timeouts-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -66,7 +91,7 @@ test("loadConfig normalizes timeout values to positive integers", () => {
 });
 
 test("loadConfig normalizes rate-limit values before returning config", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-rate-limit-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-rate-limit-"));
   const enabledConfigPath = path.join(tmpDir, "enabled.yaml");
   const disabledConfigPath = path.join(tmpDir, "disabled.yaml");
 
@@ -117,7 +142,7 @@ test("loadConfig normalizes rate-limit values before returning config", () => {
 });
 
 test("loadConfig normalizes provider model lists and codex booleans", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-provider-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-provider-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -155,7 +180,7 @@ test("loadConfig normalizes provider model lists and codex booleans", () => {
 });
 
 test("loadConfig normalizes experimental Grok OAuth provider config", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-grok-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-grok-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -192,7 +217,7 @@ test("loadConfig normalizes experimental Grok OAuth provider config", () => {
 });
 
 test("loadConfig keeps Grok OAuth disabled by default", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-grok-default-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-grok-default-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -220,7 +245,7 @@ test("loadConfig keeps Grok OAuth disabled by default", () => {
 });
 
 test("loadConfig preserves an explicit empty Claude model list", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-empty-claude-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-empty-claude-"));
   const configPath = path.join(tmpDir, "config.yaml");
 
   try {
@@ -247,7 +272,7 @@ test("loadConfig preserves an explicit empty Claude model list", () => {
 });
 
 test("loadConfig normalizes cloaking billing build hash", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-config-cloaking-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-cloaking-"));
   const validConfigPath = path.join(tmpDir, "valid.yaml");
   const invalidConfigPath = path.join(tmpDir, "invalid.yaml");
 

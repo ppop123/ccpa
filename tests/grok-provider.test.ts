@@ -144,7 +144,7 @@ async function requestJson(options: {
 }
 
 test("GrokProvider forwards chat completions with the stored OAuth bearer token", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-grok-chat-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-grok-chat-"));
   const authFile = path.join(authDir, ".grok", "auth.json");
   writeGrokAuth(authFile);
   const provider = new GrokProvider(makeConfig(authDir, authFile));
@@ -196,7 +196,7 @@ test("GrokProvider forwards chat completions with the stored OAuth bearer token"
 });
 
 test("GrokProvider forwards responses requests with the stored OAuth bearer token", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-grok-responses-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-grok-responses-"));
   const authFile = path.join(authDir, ".grok", "auth.json");
   writeGrokAuth(authFile);
   const provider = new GrokProvider(makeConfig(authDir, authFile));
@@ -247,7 +247,7 @@ test("GrokProvider forwards responses requests with the stored OAuth bearer toke
 });
 
 test("GrokProvider forwards image generation requests with the stored OAuth bearer token", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-grok-images-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-grok-images-"));
   const authFile = path.join(authDir, ".grok", "auth.json");
   writeGrokAuth(authFile);
   const provider = new GrokProvider(makeConfig(authDir, authFile));
@@ -294,7 +294,7 @@ test("GrokProvider forwards image generation requests with the stored OAuth bear
 });
 
 test("createServer exposes Grok models, routes grok chat, and reports Grok admin status", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-grok-server-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-grok-server-"));
   const authFile = path.join(authDir, ".grok", "auth.json");
   writeGrokAuth(authFile);
   const manager = new AccountManager(authDir);
@@ -357,7 +357,7 @@ test("createServer exposes Grok models, routes grok chat, and reports Grok admin
 });
 
 test("Grok OAuth provider alone can satisfy startup readiness", () => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-grok-startup-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-grok-startup-"));
   const authFile = path.join(authDir, ".grok", "auth.json");
 
   try {

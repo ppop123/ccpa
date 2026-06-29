@@ -1,10 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 function readRepoFile(fileName: string): string {
   return fs.readFileSync(path.join(process.cwd(), fileName), "utf8");
+}
+
+function collectTrackedFiles(): string[] {
+  return execFileSync("git", ["ls-files"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  })
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .sort();
+}
+
+function isTextFile(fileName: string): boolean {
+  const buffer = fs.readFileSync(path.join(process.cwd(), fileName));
+  return !buffer.includes(0);
 }
 
 test("Chinese README documents strict external healthcheck log-path contract", () => {
@@ -31,4 +47,23 @@ test("README files point to the documentation map", () => {
   assert.match(chineseReadme, /\[文档地图\]\(docs\/README\.md\)/);
   assert.match(docsReadme, /\[Operations Guide\]\(CCPA_OPERATIONS_GUIDE\.md\)/);
   assert.match(docsReadme, /\[Plan archive\]\(plans\/README\.md\)/);
+});
+
+test("tracked text files do not expose the legacy project name", () => {
+  const legacyProjectName = ["auth2", "api"].join("");
+  const legacyVariants = [
+    legacyProjectName,
+    ["Auth2", "API"].join(""),
+    legacyProjectName.toUpperCase(),
+  ];
+
+  const offenders = collectTrackedFiles().flatMap((fileName) => {
+    if (!isTextFile(fileName)) return [];
+    const body = readRepoFile(fileName);
+    return legacyVariants.some((variant) => body.includes(variant))
+      ? [fileName]
+      : [];
+  });
+
+  assert.deepEqual(offenders, []);
 });

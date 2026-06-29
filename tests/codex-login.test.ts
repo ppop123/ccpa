@@ -66,7 +66,7 @@ test("runCodexLogin returns the auth file path after successful codex login", as
 });
 
 test("runCodexLogin fills proxy env from LaunchAgent plist when shell env is missing", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-login-plist-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-login-plist-"));
   const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
   const authFilePath = path.join(tmpDir, "auth.json");
   fs.writeFileSync(authFilePath, "{}");
@@ -113,7 +113,7 @@ test("runCodexLogin fills proxy env from LaunchAgent plist when shell env is mis
 });
 
 test("runCodexLogin keeps explicit shell proxy env over LaunchAgent plist", async (t) => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-login-env-precedence-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-login-env-precedence-"));
   const plistPath = path.join(tmpDir, "com.wy.ccpa.plist");
   const authFilePath = path.join(tmpDir, "auth.json");
   fs.writeFileSync(authFilePath, "{}");

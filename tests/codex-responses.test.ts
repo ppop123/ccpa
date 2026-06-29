@@ -196,7 +196,7 @@ function makeStreamResponse(chunks: string[]): Response {
 }
 
 test("Codex responses handler sends bearer token and maps response", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -313,7 +313,7 @@ test("Codex responses handler sends bearer token and maps response", async (t) =
 });
 
 test("Codex responses handler preserves response.output_text.done text without deltas", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-output-text-done-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-output-text-done-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -352,7 +352,7 @@ test("Codex responses handler preserves response.output_text.done text without d
 });
 
 test("Codex responses handler passes stream_options for streaming clients", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-stream-options-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-stream-options-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -401,7 +401,7 @@ test("Codex responses handler passes stream_options for streaming clients", asyn
 });
 
 test("Codex responses handler normalizes string input to a user message", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-string-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-string-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -443,8 +443,8 @@ test("Codex responses handler normalizes string input to a user message", async 
 });
 
 test("Codex responses handler validates instructions before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-instructions-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-instructions-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -489,8 +489,8 @@ test("Codex responses handler validates instructions before auth and upstream", 
 });
 
 test("Codex responses handler validates background before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-background-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-background-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -551,8 +551,8 @@ test("Codex responses handler validates background before auth and upstream", as
 });
 
 test("Codex responses handler validates context_management before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-context-management-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-context-management-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -611,8 +611,8 @@ test("Codex responses handler validates context_management before auth and upstr
 });
 
 test("Codex responses handler validates prompt before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-prompt-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-prompt-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -673,8 +673,8 @@ test("Codex responses handler validates prompt before auth and upstream", async 
 });
 
 test("Codex responses handler validates max_tool_calls before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-max-tool-calls-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-max-tool-calls-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -721,8 +721,8 @@ test("Codex responses handler validates max_tool_calls before auth and upstream"
 });
 
 test("Codex responses handler validates safety_identifier before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-safety-id-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-safety-id-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -773,8 +773,8 @@ test("Codex responses handler validates safety_identifier before auth and upstre
 });
 
 test("Codex responses handler validates user before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-user-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-user-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -819,7 +819,7 @@ test("Codex responses handler validates user before auth and upstream", async (t
 });
 
 test("Codex responses handler uses configured default store", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-store-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-store-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile, true));
@@ -861,7 +861,7 @@ test("Codex responses handler uses configured default store", async (t) => {
 });
 
 test("Codex responses handler preserves explicit store from client request", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-explicit-store-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-explicit-store-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile, false));
@@ -904,8 +904,8 @@ test("Codex responses handler preserves explicit store from client request", asy
 });
 
 test("Codex responses handler validates store before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-store-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-store-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -950,7 +950,7 @@ test("Codex responses handler validates store before auth and upstream", async (
 });
 
 test("Codex responses handler retries once with refreshed auth after upstream 401", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-401-refresh-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-401-refresh-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "stale-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1002,7 +1002,7 @@ test("Codex responses handler retries once with refreshed auth after upstream 40
 });
 
 test("Codex responses handler converts system input role to developer", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-system-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-system-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -1050,8 +1050,8 @@ test("Codex responses handler converts system input role to developer", async (t
 });
 
 test("Codex responses handler validates max_output_tokens before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-max-output-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-max-output-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1096,8 +1096,8 @@ test("Codex responses handler validates max_output_tokens before auth and upstre
 });
 
 test("Codex responses handler validates reasoning fields before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-reasoning-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-reasoning-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1170,8 +1170,8 @@ test("Codex responses handler validates reasoning fields before auth and upstrea
 });
 
 test("Codex responses handler validates sampling parameters before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-sampling-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-sampling-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1223,8 +1223,8 @@ test("Codex responses handler validates sampling parameters before auth and upst
 });
 
 test("Codex responses handler validates top_logprobs before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-top-logprobs-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-top-logprobs-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1271,8 +1271,8 @@ test("Codex responses handler validates top_logprobs before auth and upstream", 
 });
 
 test("Codex responses handler validates parallel_tool_calls before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-parallel-tools-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-parallel-tools-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1317,8 +1317,8 @@ test("Codex responses handler validates parallel_tool_calls before auth and upst
 });
 
 test("Codex responses handler passes custom tools and custom tool calls to upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-custom-tools-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-custom-tools-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const calls: Array<{ body: any }> = [];
@@ -1391,8 +1391,8 @@ test("Codex responses handler passes custom tools and custom tool calls to upstr
 });
 
 test("Codex responses handler passes allowed_tools tool_choice to upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-allowed-tools-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-allowed-tools-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   const calls: Array<{ body: any }> = [];
@@ -1461,8 +1461,8 @@ test("Codex responses handler passes allowed_tools tool_choice to upstream", asy
 });
 
 test("Codex responses handler rejects unsupported hosted tool_choice before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-hosted-tool-choice-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-hosted-tool-choice-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   let upstreamCalls = 0;
@@ -1522,8 +1522,8 @@ test("Codex responses handler rejects unsupported hosted tool_choice before upst
 });
 
 test("Codex responses handler rejects unsupported hosted tools before upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-hosted-tools-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-hosted-tools-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-access-token");
   let upstreamCalls = 0;
@@ -1580,8 +1580,8 @@ test("Codex responses handler rejects unsupported hosted tools before upstream",
 });
 
 test("Codex responses handler validates service_tier before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-service-tier-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-service-tier-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1626,8 +1626,8 @@ test("Codex responses handler validates service_tier before auth and upstream", 
 });
 
 test("Codex responses handler validates prompt cache parameters before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-prompt-cache-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-prompt-cache-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1677,8 +1677,8 @@ test("Codex responses handler validates prompt cache parameters before auth and 
 });
 
 test("Codex responses handler validates truncation before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-truncation-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-truncation-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1723,8 +1723,8 @@ test("Codex responses handler validates truncation before auth and upstream", as
 });
 
 test("Codex responses handler validates previous_response_id before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-previous-response-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-previous-response-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1769,8 +1769,8 @@ test("Codex responses handler validates previous_response_id before auth and ups
 });
 
 test("Codex responses handler validates conversation before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-conversation-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-conversation-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1825,8 +1825,8 @@ test("Codex responses handler validates conversation before auth and upstream", 
 });
 
 test("Codex responses handler validates include before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-include-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-include-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1879,8 +1879,8 @@ test("Codex responses handler validates include before auth and upstream", async
 });
 
 test("Codex responses handler validates stream_options before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-stream-options-invalid-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-stream-options-invalid-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1936,8 +1936,8 @@ test("Codex responses handler validates stream_options before auth and upstream"
 });
 
 test("Codex responses handler validates metadata before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-metadata-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-metadata-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -1993,8 +1993,8 @@ test("Codex responses handler validates metadata before auth and upstream", asyn
 });
 
 test("Codex responses handler validates text format before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-text-format-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-text-format-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   let upstreamCalls = 0;
 
@@ -2056,7 +2056,7 @@ test("Codex responses handler validates text format before auth and upstream", a
 });
 
 test("Codex responses handler returns upstream timeout when upstream fetch times out", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-timeout-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-timeout-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2094,7 +2094,7 @@ test("Codex responses handler returns upstream timeout when upstream fetch times
 });
 
 test("Codex responses handler returns upstream network error when upstream fetch fails", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-network-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-network-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2133,7 +2133,7 @@ test("Codex responses handler returns upstream network error when upstream fetch
 });
 
 test("Codex responses handler returns upstream network error when upstream SSE is truncated", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-truncated-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-truncated-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2173,7 +2173,7 @@ test("Codex responses handler returns upstream network error when upstream SSE i
 });
 
 test("Codex responses handler preserves upstream SSE error events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-sse-error-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-sse-error-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2212,7 +2212,7 @@ test("Codex responses handler preserves upstream SSE error events", async (t) =>
 });
 
 test("Codex responses handler treats response.incomplete as terminal", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-incomplete-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-incomplete-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2252,7 +2252,7 @@ test("Codex responses handler treats response.incomplete as terminal", async (t)
 });
 
 test("Codex responses handler preserves response.failed details", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-failed-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-failed-sse-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   writeAuth(authFile, "codex-token");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -2291,8 +2291,8 @@ test("Codex responses handler preserves response.failed details", async (t) => {
 });
 
 test("Codex responses handler returns controlled error when auth file is missing", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-missing-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-missing-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
 
   const restoreFetch = global.fetch;
@@ -2330,8 +2330,8 @@ test("Codex responses handler returns controlled error when auth file is missing
 });
 
 test("Codex responses handler returns controlled error when auth file is malformed", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-malformed-"));
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-responses-home-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-malformed-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-responses-home-"));
   const authFile = path.join(authDir, ".codex", "auth.json");
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   fs.writeFileSync(

@@ -82,7 +82,7 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
 const DEFAULT_CONFIG: Config = {
   host: "",
   port: 8317,
-  "auth-dir": "~/.auth2api",
+  "auth-dir": "~/.ccpa",
   "api-keys": [],
   "body-limit": "200mb",
   cloaking: {

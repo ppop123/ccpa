@@ -154,7 +154,7 @@ function makeSseResponse(chunks: string[]): Response {
 }
 
 test("Codex image generations validates OpenAI image parameters before auth and upstream", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-validation-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-validation-"));
   const authFile = path.join(authDir, "missing-auth.json");
   const provider = new CodexProvider(makeConfig(authDir, authFile));
   const server = await startApp(provider.handleImageGenerations());
@@ -238,7 +238,7 @@ test("Codex image generations validates OpenAI image parameters before auth and 
 });
 
 test("Codex image generations maps supported image parameters to the image_generation tool", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-mapping-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-mapping-"));
   const authFile = path.join(authDir, "codex-auth.json");
   writeAuth(authFile);
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -312,7 +312,7 @@ test("Codex image generations maps supported image parameters to the image_gener
 });
 
 test("Codex image generations returns upstream timeout when upstream fetch times out", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-timeout-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-timeout-"));
   const authFile = path.join(authDir, "codex-auth.json");
   writeAuth(authFile);
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -347,7 +347,7 @@ test("Codex image generations returns upstream timeout when upstream fetch times
 });
 
 test("Codex image generations returns upstream network error when upstream fetch fails", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-network-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-network-"));
   const authFile = path.join(authDir, "codex-auth.json");
   writeAuth(authFile);
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -383,7 +383,7 @@ test("Codex image generations returns upstream network error when upstream fetch
 });
 
 test("Codex image generations returns upstream network error when upstream SSE is truncated", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-truncated-sse-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-truncated-sse-"));
   const authFile = path.join(authDir, "codex-auth.json");
   writeAuth(authFile);
   const provider = new CodexProvider(makeConfig(authDir, authFile));
@@ -420,7 +420,7 @@ test("Codex image generations returns upstream network error when upstream SSE i
 });
 
 test("Codex image generations preserves upstream SSE error events", async (t) => {
-  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-codex-images-sse-error-"));
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-images-sse-error-"));
   const authFile = path.join(authDir, "codex-auth.json");
   writeAuth(authFile);
   const provider = new CodexProvider(makeConfig(authDir, authFile));

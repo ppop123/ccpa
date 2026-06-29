@@ -2,7 +2,7 @@ host: ""
 port: 8317
 
 # Directory to store Claude OAuth tokens
-auth-dir: "~/.auth2api"
+auth-dir: "~/.ccpa"
 
 # API keys for client authentication (clients use these to access this proxy)
 api-keys:

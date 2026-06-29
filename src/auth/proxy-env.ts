@@ -56,13 +56,12 @@ function defaultLaunchAgentPlistPaths(readdirSync: (path: string) => string[]): 
   const preferred = [
     "com.wy.ccpa.plist",
     "com.wangyan.ccpa.plist",
-    "com.auth2api.plist",
   ].map((name) => path.join(launchAgentsDir, name));
 
   let discovered: string[] = [];
   try {
     discovered = readdirSync(launchAgentsDir)
-      .filter((name) => /\.plist$/i.test(name) && /(ccpa|auth2api)/i.test(name))
+      .filter((name) => /\.plist$/i.test(name) && /ccpa/i.test(name))
       .map((name) => path.join(launchAgentsDir, name));
   } catch {
     discovered = [];
