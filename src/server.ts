@@ -487,7 +487,10 @@ export function createServer(config: Config, manager: AccountManager): express.A
   });
 
   app.get("/monitor", (_req, res) => {
-    res.type("html").send(renderMonitorPage());
+    res
+      .set("Cache-Control", "no-store")
+      .type("html")
+      .send(renderMonitorPage());
   });
 
   app.get("/admin/accounts", (_req, res) => {

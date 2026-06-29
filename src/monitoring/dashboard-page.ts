@@ -784,11 +784,15 @@ export function renderMonitorPage(): string {
 
           var providerCards = [
             renderProviderCard("Claude", accounts.claude),
-            renderProviderCard("Codex", accounts.codex)
+            renderProviderCard("Codex", accounts.codex),
+            renderProviderCard("Grok", accounts.grok || {
+              available: false,
+              details: {
+                enabled: false,
+                hint: "No Grok provider status returned from /admin/accounts"
+              }
+            })
           ];
-          if (accounts.grok) {
-            providerCards.push(renderProviderCard("Grok", accounts.grok));
-          }
           document.getElementById("provider-status").innerHTML = providerCards.join("");
 
           var accountCards = (accounts.accounts || []).map(renderAccountCard);

@@ -198,6 +198,7 @@ test("browser monitor page is directly openable and does not embed API keys", as
 
   assert.equal(pageResp.status, 200);
   assert.match(String(pageResp.headers["content-type"] || ""), /text\/html/i);
+  assert.match(String(pageResp.headers["cache-control"] || ""), /no-store/i);
   assert.match(pageResp.rawBody, /ccpa Monitor/i);
   assert.match(pageResp.rawBody, /\/admin\/accounts/);
   assert.match(pageResp.rawBody, /\/admin\/usage/);
@@ -206,7 +207,7 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /Cache Hit/i);
   assert.match(pageResp.rawBody, /refresh failures/i);
   assert.match(pageResp.rawBody, /next refresh/i);
-  assert.match(pageResp.rawBody, /renderProviderCard\("Grok", accounts\.grok\)/);
+  assert.match(pageResp.rawBody, /renderProviderCard\("Grok", accounts\.grok \|\|/);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
   assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
 });
