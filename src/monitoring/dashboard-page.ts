@@ -70,10 +70,11 @@ body{margin:0}
 .prov{border:1px solid var(--line);border-radius:11px;padding:12px;background:var(--panel2)}
 .prov-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px}
 .prov-n{font-size:13.5px;font-weight:600}
-.prov-rows{display:grid;gap:7px}
-.prow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px}
-.prow-k{color:var(--ink2);flex:none}
-.prow-v{font-family:var(--mono);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prov-rows{display:grid;gap:9px}
+.prow{display:grid;gap:2px;font-size:12px;min-width:0}
+.prow-k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+.prow-v{font-family:var(--mono);font-size:11.5px;color:var(--ink);line-height:1.4;word-break:break-all;min-width:0}
+.prow-v.short{word-break:normal}
 .acc-list{display:grid;gap:10px}
 .acc{border:1px solid var(--line);border-radius:11px;padding:12px;background:var(--panel2)}
 .acc.err{border-color:var(--err-line);background:var(--err-soft)}
@@ -381,6 +382,7 @@ body{margin:0}
           return Math.floor(m / 60) + "h ago";
         }
         function uaShort(ua) { if (!ua) return "no ua"; return ua.length > 34 ? ua.slice(0, 32) + "…" : ua; }
+        function homeShort(p) { return String(p).replace(/^\\/(Users|home)\\/[^/]+\\//, "~/"); }
         function mdShort(key) {
           var p = String(key).split("-");
           var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1], 10) - 1] || "";
@@ -587,21 +589,21 @@ body{margin:0}
                 var accs = det.accounts || [];
                 var ready = accs.filter(function (a) { return a.available; }).length;
                 var total = det.accountCount != null ? det.accountCount : accs.length;
-                rows.push(["Accounts", String(total)]);
-                rows.push(["Ready", ready + " / " + total]);
-                if (det.hint) rows.push(["Hint", det.hint]);
+                rows.push(["Accounts", String(total), true]);
+                rows.push(["Ready", ready + " / " + total, true]);
+                if (det.hint) rows.push(["Hint", det.hint, false]);
               } else {
-                if ("authMode" in det) rows.push(["Auth mode", det.authMode || "—"]);
-                if (det.accountId) rows.push(["Account", det.accountId]);
-                if (det.lastRefresh) rows.push(["Last refresh", timeAgo(det.lastRefresh, now)]);
-                if (det.path) rows.push(["Auth file", det.path]);
-                if (!en) rows.push(["State", "Not enabled in config"]);
-                if (det.error) rows.push(["Error", det.error]);
-                if (det.hint && !det.error) rows.push(["Hint", det.hint]);
+                if ("authMode" in det) rows.push(["Auth mode", det.authMode || "—", true]);
+                if (det.accountId) rows.push(["Account", det.accountId, false]);
+                if (det.lastRefresh) rows.push(["Last refresh", timeAgo(det.lastRefresh, now), true]);
+                if (det.path) rows.push(["Auth file", homeShort(det.path), false]);
+                if (!en) rows.push(["State", "Not enabled in config", true]);
+                if (det.error) rows.push(["Error", det.error, false]);
+                if (det.hint && !det.error) rows.push(["Hint", det.hint, false]);
               }
             }
             var rowsHtml = rows.map(function (r) {
-              return '<div class="prow"><span class="prow-k">' + escapeHtml(r[0]) + '</span><span class="prow-v">' + escapeHtml(r[1]) + "</span></div>";
+              return '<div class="prow"><span class="prow-k">' + escapeHtml(r[0]) + '</span><span class="prow-v' + (r[2] ? " short" : "") + '" title="' + escapeHtml(r[1]) + '">' + escapeHtml(r[1]) + "</span></div>";
             }).join("");
             return '<div class="prov"><div class="prov-h"><span class="prov-n">' + escapeHtml(name) + '</span><span class="pill ' + tone + '"><span class="dot ' + tone + '"></span>' + escapeHtml(statusLabel) + '</span></div><div class="prov-rows">' + rowsHtml + "</div></div>";
           }
