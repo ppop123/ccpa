@@ -203,11 +203,11 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /\/admin\/accounts/);
   assert.match(pageResp.rawBody, /\/admin\/usage/);
   assert.match(pageResp.rawBody, /\/admin\/usage\/recent/);
-  assert.match(pageResp.rawBody, /Context/i);
-  assert.match(pageResp.rawBody, /Cache Hit/i);
-  assert.match(pageResp.rawBody, /refresh failures/i);
+  assert.match(pageResp.rawBody, /failureContext/);
+  assert.match(pageResp.rawBody, /Cache hit/i);
+  assert.match(pageResp.rawBody, /refresh fail/i);
   assert.match(pageResp.rawBody, /next refresh/i);
-  assert.match(pageResp.rawBody, /renderProviderCard\("Grok", accounts\.grok \|\|/);
+  assert.match(pageResp.rawBody, /pdetail\("Grok", acc\.grok\)/);
   assert.match(pageResp.rawBody, /cache:\s*"no-store"/);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
   assert.equal(pageResp.rawBody.includes(config["api-keys"][0]), false);
