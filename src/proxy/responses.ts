@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
 import { AccountManager } from "../accounts/manager";
-import { setFailureContext } from "../monitoring/http-usage";
+import { clearFailureContext, setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
 import { applyCloaking } from "./cloaking";
@@ -2067,6 +2067,7 @@ export function createResponsesHandler(config: Config, manager: AccountManager) 
         }
 
         if (upstreamResp.ok) {
+          clearFailureContext(res);
           if (stream) {
             res.setHeader("Content-Type", "text/event-stream");
             res.setHeader("Cache-Control", "no-cache");

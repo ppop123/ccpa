@@ -298,6 +298,16 @@ http://127.0.0.1:8317/monitor
 
 `/monitor` 本身只是一个 HTML 壳页，不会在服务端直接嵌入实时统计。页面加载后会让你输入 API key，再由浏览器同源请求现有的 `/admin/accounts`、`/admin/usage`、`/admin/usage/recent`。
 
+![CCPA 浏览器监控面板](docs/assets/ccpa-monitor-3.0.0.png)
+
+监控页计数口径：
+
+- Provider Status 按各 provider 自己的 auth 来源展示 Claude、Codex 和 Grok 的可用状态。
+- Claude Accounts 面板只展示 Claude 账号；它显示 Claude 账号生命周期累计值，并额外标出当前进程启动以来的 Claude session 请求数。
+- Usage Breakdown 和 Live Traffic 都是当前进程内存统计，服务重启后会清空。
+- Live Traffic 的行颜色按最终请求结果判断。如果上游网络错误被 retry 恢复，最终返回 HTTP 200，这条记录会算 OK。
+- 不调用上游的 contract probe 会标记为 `probe:contract` 来源，方便和真实客户端流量区分。
+
 ## Canary
 
 构建、重启或调整 launchd 配置后，先跑一条低成本 canary：

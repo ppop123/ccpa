@@ -242,7 +242,7 @@ body{margin:0}
             <div class="prov-grid" id="providers"></div>
           </div>
           <div class="panel">
-            <div class="p-h"><div><div class="p-k">Claude accounts</div><h3 class="p-t" id="accounts-title">accounts</h3></div></div>
+            <div class="p-h"><div><div class="p-k">Claude accounts</div><h3 class="p-t" id="accounts-title">accounts</h3></div><div class="p-meta mono" id="accounts-meta"></div></div>
             <div class="acc-list" id="accounts"></div>
           </div>
         </section>
@@ -612,6 +612,8 @@ body{margin:0}
           // accounts
           var accounts = acc.accounts || [];
           $("accounts-title").textContent = (acc.account_count != null ? acc.account_count : accounts.length) + " accounts tracked";
+          var claudeSession = usage.providers && usage.providers.claude;
+          $("accounts-meta").textContent = connected ? ("session requests " + num((claudeSession && claudeSession.totalRequests) || 0) + " since start") : "";
           function ag(k, v, tone) { return '<div class="ag"><span class="ag-k">' + escapeHtml(k) + '</span><span class="ag-v ' + (tone || "") + '">' + escapeHtml(v) + "</span></div>"; }
           if (accounts.length) {
             $("accounts").innerHTML = accounts.map(function (a) {
@@ -626,9 +628,9 @@ body{margin:0}
                 '<div class="acc-h"><span class="acc-m">' + escapeHtml(a.email || "unknown") + '</span><span class="pill ' + tone + '"><span class="dot ' + tone + '"></span>' + escapeHtml(stateLabel) + "</span></div>" +
                 (cooldownText ? '<div class="acc-cd ' + tone + '">' + escapeHtml(cooldownText) + "</div>" : "") +
                 '<div class="acc-grid">' +
-                  ag("requests", num(a.totalRequests), "") +
-                  ag("ok", num(a.totalSuccesses), "ok") +
-                  ag("fail", num(a.totalFailures), a.totalFailures > 0 ? "err" : "") +
+                  ag("lifetime requests", num(a.totalRequests), "") +
+                  ag("lifetime ok", num(a.totalSuccesses), "ok") +
+                  ag("lifetime fail", num(a.totalFailures), a.totalFailures > 0 ? "err" : "") +
                   ag("expires", until(a.expiresAt, now), "") +
                   ag("refresh fails", num(a.refreshFailureCount || 0), (a.refreshFailureCount || 0) > 0 ? "err" : "") +
                   ag("next refresh", (a.nextRefreshAttemptAt && a.nextRefreshAttemptAt > now) ? ("in " + dur(a.nextRefreshAttemptAt - now)) : "—", "") +

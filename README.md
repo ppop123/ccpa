@@ -306,6 +306,23 @@ http://127.0.0.1:8317/monitor
 
 The `/monitor` page itself does not embed live data server-side. It asks for an API key in the browser, then calls the existing `/admin/accounts`, `/admin/usage`, and `/admin/usage/recent` endpoints over same-origin requests.
 
+![CCPA browser monitor dashboard](docs/assets/ccpa-monitor-3.0.0.png)
+
+Monitor counter semantics:
+
+- Provider Status shows Claude, Codex, and Grok readiness from each provider's
+  own auth source.
+- Claude Accounts is intentionally Claude-specific. It shows Claude account
+  lifetime totals, plus a small session counter for Claude requests since the
+  current process started.
+- Usage Breakdown and Live Traffic are process-session metrics and reset on
+  restart.
+- Live Traffic row color follows the final request outcome. If an upstream
+  network error is recovered by retry and the final response is HTTP 200, the
+  row is recorded as OK.
+- No-upstream contract probes are marked with source `probe:contract`, making
+  them easy to separate from real clients.
+
 ## Canary
 
 Run a low-cost canary after building, restarting, or changing launchd config:

@@ -1,6 +1,6 @@
 {
   "name": "ccpa",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Local Claude, Codex, and Grok proxy with OpenAI-compatible endpoints",
   "main": "dist/index.js",
   "scripts": {

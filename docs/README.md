@@ -12,6 +12,8 @@ planning context.
 - [Operations Guide](CCPA_OPERATIONS_GUIDE.md): detailed runbook for local and
   50.9 deployments, endpoint behavior, model routing, OAuth recovery, logs,
   rollback, and known gaps.
+- [Monitor screenshot](assets/ccpa-monitor-3.0.0.png): sanitized browser
+  monitor image used by the GitHub README.
 - [Plan archive](plans/README.md): dated design notes, implementation plans,
   compatibility reviews, and release handoff notes.
 - [CHANGELOG](../CHANGELOG.md): repository-level release notes when maintained.
@@ -47,4 +49,3 @@ are not the product manual.
   docs. Run `npm run secrets:scan` before handing off a release candidate.
 - Prefer adding an index or status note over moving old files. Many historical
   plans are useful as evidence and should remain stable.
-

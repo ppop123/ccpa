@@ -2,7 +2,7 @@ import { Request, Response as ExpressResponse } from "express";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
 import { AccountManager } from "../accounts/manager";
-import { setFailureContext } from "../monitoring/http-usage";
+import { clearFailureContext, setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
 import { applyCloaking } from "./cloaking";
@@ -562,6 +562,7 @@ export function createMessagesHandler(config: Config, manager: AccountManager) {
         }
 
         if (upstreamResp.ok) {
+          clearFailureContext(res);
           if (stream) {
             // Pipe SSE directly — no translation needed
             res.setHeader("Content-Type", "text/event-stream");
@@ -766,6 +767,7 @@ export function createCountTokensHandler(config: Config, manager: AccountManager
         }
 
         if (upstreamResp.ok) {
+          clearFailureContext(res);
           const parsed = await readClaudeJsonResponse(upstreamResp, res, manager, account.email);
           if (!parsed.ok) return;
           const data = parsed.data;

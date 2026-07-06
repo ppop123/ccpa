@@ -2,7 +2,7 @@ import { Request, Response as ExpressResponse } from "express";
 import { extractApiKey } from "../api-key";
 import { Config, isDebugLevel } from "../config";
 import { AccountManager } from "../accounts/manager";
-import { setFailureContext } from "../monitoring/http-usage";
+import { clearFailureContext, setFailureContext } from "../monitoring/http-usage";
 import { apiError, invalidRequest, rateLimitError } from "../errors/openai";
 import { redactForLog } from "../logging/redact";
 import { openaiToClaude, claudeToOpenai, resolveModel } from "./translator";
@@ -1554,6 +1554,7 @@ export function createChatCompletionsHandler(config: Config, manager: AccountMan
         }
 
         if (upstreamResp.ok) {
+          clearFailureContext(res);
           if (stream) {
             const streamResult = await handleStreamingResponse(upstreamResp, res, model, {
               includeUsage: body?.stream_options?.include_usage === true,

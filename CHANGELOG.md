@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.0.0 - 2026-07-06
+
+This release promotes the browser monitor and local contract probes into the
+main release surface. It also fixes a usage-accounting edge case where a final
+HTTP 200 response could still be shown as failed after an upstream retry.
+
+### Highlights
+
+- Clarified monitor request counters: Claude account cards now label lifetime
+  account totals separately from process-session usage totals.
+- Fixed retry success accounting across chat completions, Responses API,
+  Claude native messages, and Claude native count_tokens. A transient upstream
+  network failure that is recovered by retry now records the final request as
+  successful instead of keeping stale failure context.
+- Tagged contract-check traffic with `x-ccpa-source: probe:contract`, so the
+  Live Traffic table can separate local compatibility probes from real clients.
+- Documented that the Claude Accounts panel is Claude-specific. Codex and Grok
+  readiness remain visible in the Provider Status card because those providers
+  use separate auth-file state rather than Claude-style account rows.
+- Added a sanitized browser-monitor screenshot for the GitHub README.
+
+### Validation
+
+- `npm exec -- tsx --test tests/admin-usage.test.ts`
+- `npm exec -- tsx --test tests/contract-check-script.test.ts`
+- `npm run typecheck`
+- `git diff --check`
+
 ## v2.0.1 - 2026-06-29
 
 This patch release prepares CCPA for the public GitHub repository and refreshes

@@ -115,6 +115,8 @@ function makeRedactor(apiKey) {
   };
 }
 
+const PROBE_HEADERS = { "x-ccpa-source": "probe:contract" };
+
 async function fetchText(baseUrl, pathName, options, timeoutMs) {
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
@@ -151,6 +153,7 @@ function parseExpectedErrorJsonOrThrow(check, result, redact) {
 
 async function expectErrorCode(baseUrl, check, apiKey, timeoutMs, redact) {
   const headers = {
+    ...PROBE_HEADERS,
     ...(check.auth === "valid" ? { Authorization: `Bearer ${apiKey}` } : {}),
     ...(check.auth === "invalid" ? { Authorization: "Bearer invalid-contract-key" } : {}),
     ...(check.headers || {}),
@@ -186,6 +189,7 @@ async function expectOkJson(baseUrl, check, apiKey, timeoutMs, redact) {
     {
       method: check.method,
       headers: {
+        ...PROBE_HEADERS,
         ...(check.auth === "valid" ? { Authorization: `Bearer ${apiKey}` } : {}),
         ...(check.headers || {}),
       },

@@ -25,7 +25,7 @@ The public health endpoint returns only non-sensitive runtime identity:
 {
   "status": "ok",
   "service": "ccpa",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "started_at": "2026-06-29T00:00:00.000Z",
   "uptime_ms": 1234
 }
@@ -191,6 +191,22 @@ Useful local endpoints:
 
 Admin endpoints require a configured API key. `/monitor` serves a static browser
 shell and fetches admin JSON from the browser after you enter an API key.
+
+Monitor interpretation notes:
+
+- Provider Status is the cross-provider readiness view for Claude, Codex, and
+  Grok.
+- Claude Accounts is Claude-specific. Codex and Grok use auth-file readiness,
+  so they do not appear as Claude-style account rows.
+- Claude account cards show lifetime account totals. The small account-panel
+  metadata line shows Claude request count since the current process started.
+- Usage Breakdown and Live Traffic are memory-only session metrics and reset on
+  process restart.
+- Live Traffic marks rows from the final recorded outcome. A transient upstream
+  network failure that is recovered by retry and ends with HTTP 200 is recorded
+  as OK.
+- `probe:contract` in the Source column marks the no-upstream compatibility
+  probe run by `npm run contract:check`.
 
 ## Logs And Healthcheck
 

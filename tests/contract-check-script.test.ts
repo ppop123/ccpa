@@ -20,10 +20,12 @@ function serverAddress(server: http.Server): AddressInfo {
 interface ContractServerOptions {
   brokenUnauthenticatedModels?: boolean;
   leakApiKeyInBrokenResponse?: boolean;
+  observedSources?: string[];
 }
 
 async function startContractServer(options: ContractServerOptions = {}): Promise<http.Server> {
   const server = http.createServer((req, res) => {
+    options.observedSources?.push(String(req.headers["x-ccpa-source"] || ""));
     const auth = req.headers.authorization;
     const sendJson = (status: number, body: unknown) => {
       res.writeHead(status, { "content-type": "application/json" });
@@ -246,7 +248,8 @@ test("contract check help documents no-upstream OpenAI compatibility checks", as
 
 test("contract check verifies low-cost protocol contracts without leaking API keys", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-contract-"));
-  const server = await startContractServer();
+  const observedSources: string[] = [];
+  const server = await startContractServer({ observedSources });
   const baseUrl = `http://127.0.0.1:${serverAddress(server).port}`;
   const configPath = writeConfig(tmpDir);
 
@@ -274,6 +277,8 @@ test("contract check verifies low-cost protocol contracts without leaking API ke
   assert.match(result.stdout, /GET \/admin\/not-real: endpoint_not_implemented/);
   assert.doesNotMatch(result.stdout, /test-key/);
   assert.doesNotMatch(result.stderr, /test-key/);
+  assert.ok(observedSources.length > 0);
+  assert.deepEqual([...new Set(observedSources)], ["probe:contract"]);
 });
 
 test("contract check fails loudly and redacts API keys when a contract breaks", async (t) => {

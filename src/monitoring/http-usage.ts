@@ -183,6 +183,10 @@ export function setFailureContext(
   } satisfies FailureContextInput;
 }
 
+export function clearFailureContext(res: express.Response): void {
+  delete res.locals[FAILURE_CONTEXT_KEY];
+}
+
 function parseJsonUsage(body: any): UsageDetails {
   const cacheCreationTokens = readNumber(body?.usage?.cache_creation_input_tokens, 0);
   const cacheReadTokens = readNumber(

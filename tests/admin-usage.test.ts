@@ -207,6 +207,8 @@ test("browser monitor page is directly openable and does not embed API keys", as
   assert.match(pageResp.rawBody, /Cache hit/i);
   assert.match(pageResp.rawBody, /refresh fail/i);
   assert.match(pageResp.rawBody, /next refresh/i);
+  assert.match(pageResp.rawBody, /session requests/i);
+  assert.match(pageResp.rawBody, /lifetime requests/i);
   assert.match(pageResp.rawBody, /pdetail\("Grok", acc\.grok\)/);
   assert.match(pageResp.rawBody, /cache:\s*"no-store"/);
   assert.match(pageResp.rawBody, /<input[^>]+type="password"/i);
@@ -460,6 +462,88 @@ test("admin usage tracks failed requests and recent limit", async (t) => {
   assert.equal(recentResp.body.items[0].success, true);
   assert.equal(recentResp.body.items[0].statusCode, 200);
   assert.equal(typeof recentResp.body.items[0].latencyMs, "number");
+});
+
+test("admin usage marks a retried upstream success as successful", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-retry-success-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-admin-usage-retry-home-"));
+  writeCodexAuth(authDir);
+
+  const config = makeConfig(authDir);
+  const manager = makeManager(authDir, [makeToken()]);
+  let claudeCalls = 0;
+  const restoreFetch = withMockedFetch(async (input) => {
+    const url = String(input);
+
+    if (url === CLAUDE_URL) {
+      claudeCalls += 1;
+      if (claudeCalls === 1) {
+        throw new Error("fetch failed");
+      }
+      return new Response(
+        JSON.stringify({
+          id: "msg_retry",
+          content: [{ type: "text", text: "retried ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 3, output_tokens: 2 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    throw new Error(`Unexpected fetch URL: ${url}`);
+  });
+
+  const server = await withHomeDir(tmpHome, () => startApp(config, manager));
+
+  t.after(async () => {
+    restoreFetch();
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const headers = { Authorization: "Bearer test-key" };
+
+  const successResp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers,
+    body: {
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "retry please" }],
+      stream: false,
+    },
+  });
+
+  assert.equal(successResp.status, 200);
+  assert.equal(claudeCalls, 2);
+
+  const usageResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/usage",
+    headers,
+  });
+
+  assert.equal(usageResp.status, 200);
+  assert.equal(usageResp.body.totals.totalRequests, 1);
+  assert.equal(usageResp.body.totals.successCount, 1);
+  assert.equal(usageResp.body.totals.failureCount, 0);
+
+  const recentResp = await requestJson({
+    server,
+    method: "GET",
+    path: "/admin/usage/recent?limit=1",
+    headers,
+  });
+
+  assert.equal(recentResp.status, 200);
+  assert.equal(recentResp.body.items.length, 1);
+  assert.equal(recentResp.body.items[0].statusCode, 200);
+  assert.equal(recentResp.body.items[0].success, true);
+  assert.equal(recentResp.body.items[0].failureContext ?? null, null);
 });
 
 test("admin recent includes failure context for local routing failures", async (t) => {
