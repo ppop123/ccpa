@@ -184,6 +184,10 @@ provider requests and quota usage.
 Useful local endpoints:
 
 - `GET /health`
+- `POST /v1/agent-runs`
+- `GET /v1/agent-runs/:id`
+- `GET /v1/agent-runs/:id/artifacts`
+- `POST /v1/agent-runs/:id/cancel`
 - `GET /admin/accounts`
 - `GET /admin/usage`
 - `GET /admin/usage/recent`
@@ -207,6 +211,71 @@ Monitor interpretation notes:
   as OK.
 - `probe:contract` in the Source column marks the no-upstream compatibility
   probe run by `npm run contract:check`.
+
+## Agent Runs
+
+Agent Runs is an optional execution surface for trusted local/LAN automation.
+It accepts uploaded file contents, creates a temporary workspace under
+`agents.runs-dir`, runs `claude`, `codex`, or `grok` CLI in that workspace, and
+returns the final output, changed files, unified diff, and artifacts archive.
+
+It is disabled by default:
+
+```yaml
+agents:
+  enabled: false
+```
+
+Enable it only on trusted networks:
+
+```yaml
+agents:
+  enabled: true
+  max-concurrency: 1
+  max-runtime-ms: 600000
+  max-total-bytes: 10485760
+```
+
+When running under launchd, prefer absolute runner commands if your shell has
+multiple CLI installs. For example, point `agents.runners.claude-code.command`
+at the Claude Code binary that supports the flags in this guide, and point
+`agents.runners.grok-cli.command` at the installed Grok binary if `~/.grok/bin`
+is not in the launchd `PATH`.
+
+P1 request format is JSON:
+
+```bash
+curl http://127.0.0.1:8317/v1/agent-runs \
+  -H "Authorization: Bearer <configured-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent": "claude-code",
+    "mode": "workspace-write",
+    "wait": true,
+    "prompt": "Review these files and make the smallest useful fix.",
+    "files": [
+      {"path": "README.md", "content": "# Demo\n", "encoding": "utf8"}
+    ]
+  }'
+```
+
+Supported P1 agents are `claude-code`, `codex-cli`, and `grok-cli`. Supported
+modes are `read-only` and `workspace-write`; both modes operate only on the
+temporary uploaded-file workspace. CCPA never modifies the caller's original
+directory. The caller should review and apply `diff` or download
+`artifacts.tar.gz` from `/v1/agent-runs/:id/artifacts`.
+Completed run directories are retained up to `agents.keep-runs`; older run
+records and artifacts are removed automatically.
+
+Grok headless editing requires `bypassPermissions` plus an explicit built-in
+tool allowlist. CCPA also runs Grok with `--sandbox read-only` for read-only
+requests and `--sandbox workspace` for workspace-write requests, so the Grok
+process can only write inside the temporary run workspace and Grok's own state
+directories.
+
+`GET /admin/accounts` includes an `agents` object with the Agent Runs enablement
+state, configured limits, and runner command names. It does not include prompts
+or uploaded file contents.
 
 ## Logs And Healthcheck
 

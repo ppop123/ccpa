@@ -75,6 +75,11 @@ export interface UsageRecentSnapshot {
   generatedAt: string;
 }
 
+export interface UsageTrackerOptions {
+  now?: () => Date;
+  timeZone?: string;
+}
+
 function createCounter(): UsageCounter {
   return {
     totalRequests: 0,
@@ -87,6 +92,30 @@ function createCounter(): UsageCounter {
     cacheReadInputTokens: 0,
     cacheHitRate: 0,
     lastRequestAt: null,
+  };
+}
+
+function localBucketKeys(date: Date, timeZone?: string): { dayKey: string; hourKey: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const read = (type: Intl.DateTimeFormatPartTypes): string => {
+    return parts.find((part) => part.type === type)?.value || "";
+  };
+
+  const year = read("year");
+  const month = read("month");
+  const day = read("day");
+  const hour = read("hour");
+  return {
+    dayKey: `${year}-${month}-${day}`,
+    hourKey: hour.padStart(2, "0"),
   };
 }
 
@@ -115,10 +144,14 @@ export class UsageTracker {
   private readonly recentRecords: UsageRecord[] = [];
   private nextId = 1;
 
-  constructor(private readonly maxRecentRecords = 200) {}
+  constructor(
+    private readonly maxRecentRecords = 200,
+    private readonly options: UsageTrackerOptions = {}
+  ) {}
 
   record(record: Omit<UsageRecord, "id" | "timestamp">): UsageRecord {
-    const timestamp = new Date().toISOString();
+    const now = this.options.now ? this.options.now() : new Date();
+    const timestamp = now.toISOString();
     const fullRecord: UsageRecord = {
       id: this.nextId++,
       timestamp,
@@ -134,8 +167,7 @@ export class UsageTracker {
       updateCounter(this.getOrCreate(this.models, fullRecord.model), fullRecord);
     }
 
-    const dayKey = timestamp.slice(0, 10);
-    const hourKey = timestamp.slice(11, 13);
+    const { dayKey, hourKey } = localBucketKeys(now, this.options.timeZone);
     this.requestsByDay.set(dayKey, (this.requestsByDay.get(dayKey) || 0) + 1);
     this.requestsByHour.set(hourKey, (this.requestsByHour.get(hourKey) || 0) + 1);
 
@@ -157,7 +189,7 @@ export class UsageTracker {
       requestsByDay: Object.fromEntries(this.requestsByDay),
       requestsByHour: Object.fromEntries(this.requestsByHour),
       recentCount: this.recentRecords.length,
-      generatedAt: new Date().toISOString(),
+      generatedAt: (this.options.now ? this.options.now() : new Date()).toISOString(),
     };
   }
 
@@ -165,7 +197,7 @@ export class UsageTracker {
     const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 20;
     return {
       items: [...this.recentRecords].reverse().slice(0, normalizedLimit),
-      generatedAt: new Date().toISOString(),
+      generatedAt: (this.options.now ? this.options.now() : new Date()).toISOString(),
     };
   }
 

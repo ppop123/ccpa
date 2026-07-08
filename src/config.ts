@@ -36,6 +36,27 @@ export interface ClaudeConfig {
   "beta-header": string;
 }
 
+export type AgentRunnerName = "claude-code" | "codex-cli" | "grok-cli";
+export type AgentRunMode = "read-only" | "workspace-write";
+
+export interface AgentRunnerConfig {
+  enabled: boolean;
+  command: string;
+}
+
+export interface AgentsConfig {
+  enabled: boolean;
+  "runs-dir": string;
+  "max-concurrency": number;
+  "max-runtime-ms": number;
+  "sync-wait-ms": number;
+  "max-files": number;
+  "max-file-bytes": number;
+  "max-total-bytes": number;
+  "keep-runs": number;
+  runners: Record<AgentRunnerName, AgentRunnerConfig>;
+}
+
 export interface RateLimitConfig {
   enabled: boolean;
   "window-ms": number;
@@ -56,6 +77,7 @@ export interface Config {
   codex: CodexConfig;
   grok?: GrokConfig;
   "rate-limit"?: RateLimitConfig;
+  agents?: AgentsConfig;
   debug: DebugMode;
 }
 
@@ -78,6 +100,40 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
   "window-ms": 60_000,
   "max-requests": 60,
 };
+
+const DEFAULT_AGENT_RUNNERS: Record<AgentRunnerName, AgentRunnerConfig> = {
+  "claude-code": {
+    enabled: true,
+    command: "claude",
+  },
+  "codex-cli": {
+    enabled: true,
+    command: "codex",
+  },
+  "grok-cli": {
+    enabled: true,
+    command: "grok",
+  },
+};
+
+export function defaultAgentsConfig(): AgentsConfig {
+  return {
+    enabled: false,
+    "runs-dir": "~/.ccpa/agent-runs",
+    "max-concurrency": 1,
+    "max-runtime-ms": 600_000,
+    "sync-wait-ms": 30_000,
+    "max-files": 200,
+    "max-file-bytes": 1_048_576,
+    "max-total-bytes": 10_485_760,
+    "keep-runs": 50,
+    runners: {
+      "claude-code": { ...DEFAULT_AGENT_RUNNERS["claude-code"] },
+      "codex-cli": { ...DEFAULT_AGENT_RUNNERS["codex-cli"] },
+      "grok-cli": { ...DEFAULT_AGENT_RUNNERS["grok-cli"] },
+    },
+  };
+}
 
 const DEFAULT_CONFIG: Config = {
   host: "",
@@ -114,6 +170,7 @@ const DEFAULT_CONFIG: Config = {
     models: [],
   },
   "rate-limit": DEFAULT_RATE_LIMIT_CONFIG,
+  agents: defaultAgentsConfig(),
   debug: "off",
 };
 
@@ -212,6 +269,48 @@ function normalizeBaseUrl(value: unknown, fallback: string): string {
     return fallback;
   }
   return trimmed.replace(/\/+$/, "");
+}
+
+function normalizeRunnerConfig(value: unknown, fallback: AgentRunnerConfig): AgentRunnerConfig {
+  const raw =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    enabled: normalizeBoolean(raw.enabled, fallback.enabled),
+    command: typeof raw.command === "string" && raw.command.trim() ? raw.command.trim() : fallback.command,
+  };
+}
+
+function normalizeAgents(value: unknown): AgentsConfig {
+  const defaults = defaultAgentsConfig();
+  const raw =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const rawRunners =
+    raw.runners && typeof raw.runners === "object" && !Array.isArray(raw.runners)
+      ? (raw.runners as Partial<Record<AgentRunnerName, unknown>>)
+      : {};
+
+  return {
+    enabled: normalizeBoolean(raw.enabled, defaults.enabled),
+    "runs-dir": typeof raw["runs-dir"] === "string" && raw["runs-dir"].trim()
+      ? raw["runs-dir"].trim()
+      : defaults["runs-dir"],
+    "max-concurrency": normalizePositiveInteger(raw["max-concurrency"], defaults["max-concurrency"]),
+    "max-runtime-ms": normalizePositiveInteger(raw["max-runtime-ms"], defaults["max-runtime-ms"]),
+    "sync-wait-ms": normalizePositiveInteger(raw["sync-wait-ms"], defaults["sync-wait-ms"]),
+    "max-files": normalizePositiveInteger(raw["max-files"], defaults["max-files"]),
+    "max-file-bytes": normalizePositiveInteger(raw["max-file-bytes"], defaults["max-file-bytes"]),
+    "max-total-bytes": normalizePositiveInteger(raw["max-total-bytes"], defaults["max-total-bytes"]),
+    "keep-runs": normalizePositiveInteger(raw["keep-runs"], defaults["keep-runs"]),
+    runners: {
+      "claude-code": normalizeRunnerConfig(rawRunners["claude-code"], defaults.runners["claude-code"]),
+      "codex-cli": normalizeRunnerConfig(rawRunners["codex-cli"], defaults.runners["codex-cli"]),
+      "grok-cli": normalizeRunnerConfig(rawRunners["grok-cli"], defaults.runners["grok-cli"]),
+    },
+  };
 }
 
 function normalizeCloaking(value: unknown): CloakingConfig {
@@ -325,6 +424,7 @@ export function loadConfig(configPath?: string): Config {
   config["api-keys"] = normalizeApiKeys((config as Config & { "api-keys"?: unknown })["api-keys"]);
   config.cloaking = normalizeCloaking((config as Config & { cloaking?: unknown }).cloaking);
   config.timeouts = normalizeTimeouts((config as Config & { timeouts?: unknown }).timeouts);
+  config.agents = normalizeAgents((config as Config & { agents?: unknown }).agents);
   const rawGrok = (config as Config & { grok?: Partial<GrokConfig> }).grok;
   config.grok = {
     ...DEFAULT_CONFIG.grok,

@@ -77,6 +77,31 @@ grok:
     - "grok-imagine-image"
     - "grok-imagine-image-quality"
 
+# Optional Agent Runs API.
+# This is a higher-risk local/LAN execution surface: clients upload files, CCPA
+# creates a temporary workspace, and a CLI agent runs only against that copy.
+# Disabled by default. Do not expose it to untrusted networks.
+agents:
+  enabled: false
+  runs-dir: "~/.ccpa/agent-runs"
+  max-concurrency: 1
+  max-runtime-ms: 600000
+  sync-wait-ms: 30000
+  max-files: 200
+  max-file-bytes: 1048576
+  max-total-bytes: 10485760
+  keep-runs: 50
+  runners:
+    claude-code:
+      enabled: true
+      command: "claude"
+    codex-cli:
+      enabled: true
+      command: "codex"
+    grok-cli:
+      enabled: true
+      command: "grok"
+
 # Debug logging level:
 # off = no extra logs
 # errors = upstream/network failure details

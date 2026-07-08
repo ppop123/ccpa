@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { AccountManager } from "../src/accounts/manager";
-import { Config } from "../src/config";
+import { Config, defaultAgentsConfig } from "../src/config";
 import { canStartServer } from "../src/startup";
 import { saveToken } from "../src/auth/token-storage";
 import { TokenData } from "../src/auth/types";
@@ -161,6 +161,25 @@ test("rejects startup when neither Claude nor Codex auth is available", () => {
     const manager = loadManager(authDir);
 
     assert.equal(withHomeDir(tmpHome, () => canStartServer(makeConfig(authDir), manager)), false);
+  } finally {
+    fs.rmSync(authDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("allows startup when Agent Runs is enabled without provider auth", () => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-agents-"));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-startup-agents-home-"));
+
+  try {
+    const manager = loadManager(authDir);
+    const config = makeConfig(authDir);
+    config.codex.enabled = false;
+    config.codex.models = [];
+    config.agents = defaultAgentsConfig();
+    config.agents.enabled = true;
+
+    assert.equal(withHomeDir(tmpHome, () => canStartServer(config, manager)), true);
   } finally {
     fs.rmSync(authDir, { recursive: true, force: true });
     fs.rmSync(tmpHome, { recursive: true, force: true });

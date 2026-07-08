@@ -8,6 +8,7 @@ import { extractApiKey } from "./api-key";
 import { renderMonitorPage } from "./monitoring/dashboard-page";
 import { resolveUsageProvider, setFailureContext, wrapTrackedHandler } from "./monitoring/http-usage";
 import { UsageTracker } from "./monitoring/usage";
+import { createAgentRunRouter } from "./agents/routes";
 import { ClaudeProvider } from "./providers/claude";
 import { CodexProvider } from "./providers/codex";
 import { GrokProvider } from "./providers/grok";
@@ -374,6 +375,8 @@ export function createServer(config: Config, manager: AccountManager): express.A
   app.use("/admin", express.json({ limit: config["body-limit"] }));
   app.use("/admin", jsonBodyErrorHandler);
 
+  app.use("/v1/agent-runs", createAgentRunRouter(config.agents));
+
   // Routes — OpenAI compatible
   app.post(
     "/v1/chat/completions",
@@ -507,6 +510,25 @@ export function createServer(config: Config, manager: AccountManager): express.A
       claude: claudeStatus,
       codex: codexStatus,
       grok: grokStatus,
+      agents: config.agents
+        ? {
+            enabled: config.agents.enabled,
+            "runs-dir": config.agents["runs-dir"],
+            "max-concurrency": config.agents["max-concurrency"],
+            "max-runtime-ms": config.agents["max-runtime-ms"],
+            "max-files": config.agents["max-files"],
+            "max-total-bytes": config.agents["max-total-bytes"],
+            runners: Object.fromEntries(
+              Object.entries(config.agents.runners).map(([name, runner]) => [
+                name,
+                {
+                  enabled: runner.enabled,
+                  command: runner.command,
+                },
+              ])
+            ),
+          }
+        : { enabled: false },
       generated_at: new Date().toISOString(),
     });
   });

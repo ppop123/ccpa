@@ -27,6 +27,11 @@ current state.
 
 ## Historical Feature Plans
 
+- [Agent Runs design](2026-07-08-agent-runs-design.md): uploaded-file CLI
+  agent execution surface for Claude Code, Codex CLI, and Grok CLI.
+- [Agent Runs implementation plan](2026-07-08-agent-runs-implementation.md):
+  task-level P1 implementation plan for config, validation, run lifecycle,
+  routes, docs, and verification.
 - [Codex dual-provider design](2026-03-30-codex-dual-provider-design.md):
   provider abstraction, routing, Codex auth, streaming, and error-handling
   design.
@@ -51,4 +56,3 @@ Start each new plan with a short status paragraph that says whether it is a
 proposal, an active implementation plan, a review, or a historical handoff.
 When behavior changes after a plan lands, update the README or Operations Guide
 instead of rewriting old plan history.
-

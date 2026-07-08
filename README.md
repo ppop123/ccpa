@@ -28,6 +28,7 @@ It is intentionally not a multi-account pool, billing platform, or generic API g
 - supports `POST /v1/chat/completions`
 - supports `POST /v1/responses`
 - supports `POST /v1/images/generations`
+- optionally supports Agent Runs for uploaded file bundles through local CLI agents
 - supports `GET /v1/models`
 - supports Claude native `POST /v1/messages` and `POST /v1/messages/count_tokens`
 - provides admin status at `GET /admin/accounts`
@@ -60,7 +61,8 @@ The process can start in any of these modes:
 - Grok only
 - any combination of the enabled providers
 
-If no provider is available, startup fails.
+If no model provider is available, startup still succeeds when Agent Runs is
+explicitly enabled. Otherwise, startup fails.
 
 ## Install
 
@@ -114,6 +116,9 @@ grok:
   base-url: "https://api.x.ai/v1"
   models:
     - "grok-4.3"
+
+agents:
+  enabled: false
 
 debug: "off"
 ```
@@ -213,6 +218,44 @@ print(resp.choices[0].message.content)
 
 The helper reads `config.yaml`, uses `api-keys[0]`, and calls the local server for you.
 
+### Agent Runs
+
+Agent Runs is an optional higher-risk API for local/LAN automation. A client
+uploads a prompt plus files, CCPA creates a temporary workspace under
+`agents.runs-dir`, runs one CLI agent against that copy, and returns output,
+changed files, a unified diff, and a downloadable artifact archive. It does not
+modify the caller's original files.
+
+Enable it explicitly:
+
+```yaml
+agents:
+  enabled: true
+```
+
+Then call it with JSON file bundles:
+
+```bash
+curl http://127.0.0.1:8317/v1/agent-runs \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent": "claude-code",
+    "mode": "workspace-write",
+    "wait": true,
+    "prompt": "Read these files and make the smallest useful fix.",
+    "files": [
+      {"path": "README.md", "content": "# Demo\n", "encoding": "utf8"}
+    ]
+  }'
+```
+
+Available P1 agents are `claude-code`, `codex-cli`, and `grok-cli`. Available
+modes are `read-only` and `workspace-write`; both operate only inside the
+temporary uploaded-file workspace. Use `GET /v1/agent-runs/:id` for status,
+`POST /v1/agent-runs/:id/cancel` to cancel, and
+`GET /v1/agent-runs/:id/artifacts` to download `artifacts.tar.gz`.
+
 ### Image generation
 
 `gpt-image-2` uses the same Codex OAuth login as Codex chat models and is exposed
@@ -266,6 +309,10 @@ Important runtime rules:
 | `POST /v1/chat/completions` | OpenAI-compatible chat |
 | `POST /v1/responses` | OpenAI-compatible responses |
 | `POST /v1/images/generations` | OpenAI-compatible image generations through Codex or Grok OAuth |
+| `POST /v1/agent-runs` | Optional uploaded-file CLI agent run |
+| `GET /v1/agent-runs/:id` | Agent run status and result |
+| `POST /v1/agent-runs/:id/cancel` | Cancel a running agent run |
+| `GET /v1/agent-runs/:id/artifacts` | Download agent run artifact archive |
 | `POST /v1/messages` | Claude native messages |
 | `POST /v1/messages/count_tokens` | Claude native token counting |
 | `GET /v1/models` | List available models |

@@ -4,6 +4,10 @@ import { CodexProvider } from "./providers/codex";
 import { GrokProvider } from "./providers/grok";
 
 export function canStartServer(config: Config, manager: AccountManager): boolean {
+  if (config.agents?.enabled) {
+    return true;
+  }
+
   if (manager.accountCount > 0) {
     return true;
   }
