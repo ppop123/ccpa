@@ -37,6 +37,21 @@ test("decodeAgentFiles rejects traversal and absolute paths", () => {
   );
 });
 
+test("decodeAgentFiles rejects uploaded git metadata paths", () => {
+  assert.throws(
+    () => decodeAgentFiles([{ path: ".git/config", content: "[core]\n", encoding: "utf8" }], limits),
+    /unsafe file path/i
+  );
+  assert.throws(
+    () => decodeAgentFiles([{ path: "nested/.git/config", content: "[core]\n", encoding: "utf8" }], limits),
+    /unsafe file path/i
+  );
+  assert.throws(
+    () => decodeAgentFiles([{ path: ".GIT/config", content: "[core]\n", encoding: "utf8" }], limits),
+    /unsafe file path/i
+  );
+});
+
 test("decodeAgentFiles enforces file count and byte limits", () => {
   assert.throws(
     () =>

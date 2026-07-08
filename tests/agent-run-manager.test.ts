@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +51,9 @@ test("AgentRunManager runs a CLI agent in a temporary workspace and returns diff
   assert.match(completed.diff || "", /changed = true/);
   assert.ok(completed.artifacts_path);
   assert.equal(fs.existsSync(completed.artifacts_path), true);
+  const artifactList = spawnSync("tar", ["-tzf", completed.artifacts_path], { encoding: "utf8" });
+  assert.equal(artifactList.status, 0);
+  assert.equal(artifactList.stdout.includes("workspace/.git"), false);
 });
 
 test("AgentRunManager can cancel a running agent process", async (t) => {
@@ -152,4 +156,107 @@ test("AgentRunManager removes oldest run directories beyond keep-runs", async (t
   assert.equal(secondDone.status, "completed");
   assert.equal(fs.existsSync(firstDone.run_path), false);
   assert.equal(fs.existsSync(secondDone.run_path), true);
+});
+
+test("AgentRunManager reserves concurrency before async setup", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-agent-manager-concurrency-"));
+  const fakeRunner = writeFakeRunner(
+    tmpDir,
+    [
+      "setTimeout(() => {",
+      "  console.log('done');",
+      "}, 250);",
+    ].join("\n")
+  );
+  const config = defaultAgentsConfig();
+  config.enabled = true;
+  config["runs-dir"] = path.join(tmpDir, "runs");
+  config["max-concurrency"] = 1;
+  config.runners["claude-code"].command = fakeRunner;
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const manager = new AgentRunManager(config);
+  const results = await Promise.allSettled([
+    manager.createRun({ agent: "claude-code", prompt: "one", wait: false, files: [] }),
+    manager.createRun({ agent: "claude-code", prompt: "two", wait: false, files: [] }),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+
+  const started = results.find((result): result is PromiseFulfilledResult<Awaited<ReturnType<AgentRunManager["createRun"]>>> => result.status === "fulfilled");
+  assert.ok(started);
+  const final = await manager.waitForRun(started.value.id, 10_000);
+  assert.equal(final.status, "completed");
+});
+
+test("AgentRunManager removes setup-failed workspaces and releases the concurrency slot", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-agent-manager-setup-fail-"));
+  const fakeRunner = writeFakeRunner(tmpDir, "console.log('ok');");
+  const config = defaultAgentsConfig();
+  config.enabled = true;
+  config["runs-dir"] = path.join(tmpDir, "runs");
+  config.runners["claude-code"].command = fakeRunner;
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const manager = new AgentRunManager(config);
+  await assert.rejects(
+    () =>
+      manager.createRun({
+        agent: "claude-code",
+        prompt: "bad bundle",
+        wait: false,
+        files: [
+          { path: "same", content: "file", encoding: "utf8" },
+          { path: "same/child.txt", content: "child", encoding: "utf8" },
+        ],
+      }),
+    /not a directory|enotdir|eexist/i
+  );
+  assert.deepEqual(fs.existsSync(config["runs-dir"]) ? fs.readdirSync(config["runs-dir"]) : [], []);
+
+  const started = await manager.createRun({ agent: "claude-code", prompt: "ok", wait: false, files: [] });
+  const final = await manager.waitForRun(started.id, 10_000);
+  assert.equal(final.status, "completed");
+});
+
+test("AgentRunManager rewrites git config before collecting diffs", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-agent-manager-git-config-"));
+  const fakeRunner = writeFakeRunner(
+    tmpDir,
+    [
+      "const fs = require('fs');",
+      "fs.writeFileSync('.git/config', '[core]\\n\\tfsmonitor = sh -c \"touch ../pwned\"\\n[diff]\\n\\texternal = sh -c \"touch ../pwned\"\\n');",
+      "fs.appendFileSync('input.txt', 'changed\\n');",
+      "console.log('ok');",
+    ].join("\n")
+  );
+  const config = defaultAgentsConfig();
+  config.enabled = true;
+  config["runs-dir"] = path.join(tmpDir, "runs");
+  config.runners["claude-code"].command = fakeRunner;
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const manager = new AgentRunManager(config);
+  const started = await manager.createRun({
+    agent: "claude-code",
+    mode: "workspace-write",
+    prompt: "mutate git config",
+    wait: false,
+    files: [{ path: "input.txt", content: "seed\n", encoding: "utf8" }],
+  });
+  const final = await manager.waitForRun(started.id, 10_000);
+
+  assert.equal(final.status, "completed");
+  assert.match(final.diff || "", /changed/);
+  assert.equal(fs.existsSync(path.join(final.run_path, "pwned")), false);
 });

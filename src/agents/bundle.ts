@@ -1,6 +1,8 @@
 import path from "path";
 import { AgentFileInput, AgentFileLimits, DecodedAgentFile, AgentRunError } from "./types";
 
+const FORBIDDEN_PATH_SEGMENTS = new Set([".git", ".hg", ".svn"]);
+
 function normalizeSafePath(value: unknown): string {
   if (typeof value !== "string") {
     throw new AgentRunError("File path must be a string", 400, "invalid_agent_file_path");
@@ -20,6 +22,9 @@ function normalizeSafePath(value: unknown): string {
     normalized.startsWith("../") ||
     normalized.split("/").includes("..")
   ) {
+    throw new AgentRunError(`Unsafe file path: ${raw}`, 400, "unsafe_agent_file_path");
+  }
+  if (normalized.split("/").some((segment) => FORBIDDEN_PATH_SEGMENTS.has(segment.toLowerCase()))) {
     throw new AgentRunError(`Unsafe file path: ${raw}`, 400, "unsafe_agent_file_path");
   }
 

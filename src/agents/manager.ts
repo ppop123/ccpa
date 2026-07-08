@@ -21,6 +21,25 @@ interface RunningProcess {
 }
 
 const OUTPUT_LIMIT = 128 * 1024;
+const NULL_DEVICE = process.platform === "win32" ? "NUL" : "/dev/null";
+const SAFE_GIT_ENV: NodeJS.ProcessEnv = {
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: NULL_DEVICE,
+  GIT_PAGER: "cat",
+  GIT_EDITOR: ":",
+};
+const SAFE_GIT_CONFIG_ARGS = [
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  `core.hooksPath=${NULL_DEVICE}`,
+  "-c",
+  "core.pager=cat",
+  "-c",
+  "diff.external=",
+  "-c",
+  "commit.gpgsign=false",
+];
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -51,11 +70,18 @@ function ensureInside(root: string, candidate: string): void {
   }
 }
 
-async function runCommand(command: string, args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs = 30_000,
+  env?: NodeJS.ProcessEnv
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
+      env: env ? { ...process.env, ...env } : undefined,
     });
     let stdout = "";
     let stderr = "";
@@ -78,6 +104,10 @@ async function runCommand(command: string, args: string[], cwd: string, timeoutM
       resolve({ code: code ?? 0, stdout, stderr });
     });
   });
+}
+
+async function runGitCommand(args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number; stdout: string; stderr: string }> {
+  return runCommand("git", [...SAFE_GIT_CONFIG_ARGS, ...args], cwd, timeoutMs, SAFE_GIT_ENV);
 }
 
 async function runAgentProcess(
@@ -197,28 +227,39 @@ export class AgentRunManager {
     const runPath = path.join(runsDir, id);
     const workspacePath = path.join(runPath, "workspace");
     const logsPath = path.join(runPath, "logs");
-    fs.mkdirSync(workspacePath, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(logsPath, { recursive: true, mode: 0o700 });
-    this.writeFiles(workspacePath, decodedFiles);
-    await this.createBaseline(workspacePath);
+    this.runningCount += 1;
+    let handedOffToRunner = false;
+    try {
+      fs.mkdirSync(workspacePath, { recursive: true, mode: 0o700 });
+      fs.mkdirSync(logsPath, { recursive: true, mode: 0o700 });
+      this.writeFiles(workspacePath, decodedFiles);
+      await this.createBaseline(workspacePath);
 
-    const record: AgentRunRecord = {
-      id,
-      status: "running",
-      agent: input.agent,
-      mode,
-      created_at: nowIso(),
-      started_at: nowIso(),
-      workspace_path: workspacePath,
-      run_path: runPath,
-      exit_code: null,
-      changed_files: [],
-    };
-    this.runs.set(id, record);
+      const record: AgentRunRecord = {
+        id,
+        status: "running",
+        agent: input.agent,
+        mode,
+        created_at: nowIso(),
+        started_at: nowIso(),
+        workspace_path: workspacePath,
+        run_path: runPath,
+        exit_code: null,
+        changed_files: [],
+      };
+      this.runs.set(id, record);
 
-    const completion = this.executeRun(record, prompt, timeoutMs, logsPath);
-    this.completions.set(id, completion);
-    return record;
+      const completion = this.executeRun(record, prompt, timeoutMs, logsPath);
+      this.completions.set(id, completion);
+      handedOffToRunner = true;
+      return record;
+    } catch (error) {
+      if (!handedOffToRunner) {
+        this.runningCount = Math.max(0, this.runningCount - 1);
+      }
+      fs.rmSync(runPath, { recursive: true, force: true });
+      throw error;
+    }
   }
 
   getRun(id: string): AgentRunRecord | undefined {
@@ -267,16 +308,16 @@ export class AgentRunManager {
   }
 
   private async createBaseline(workspace: string): Promise<void> {
-    await runCommand("git", ["init"], workspace);
-    await runCommand("git", ["config", "user.email", "ccpa-agent-runs@example.local"], workspace);
-    await runCommand("git", ["config", "user.name", "CCPA Agent Runs"], workspace);
-    await runCommand("git", ["add", "-A"], workspace);
-    await runCommand("git", ["commit", "--allow-empty", "-m", "ccpa-agent-runs-baseline"], workspace);
+    await runGitCommand(["init"], workspace);
+    this.writeSafeGitConfig(workspace);
+    await runGitCommand(["config", "user.email", "ccpa-agent-runs@example.local"], workspace);
+    await runGitCommand(["config", "user.name", "CCPA Agent Runs"], workspace);
+    await runGitCommand(["add", "-A"], workspace);
+    await runGitCommand(["commit", "--allow-empty", "-m", "ccpa-agent-runs-baseline"], workspace);
   }
 
   private async executeRun(record: AgentRunRecord, prompt: string, timeoutMs: number, logsPath: string): Promise<AgentRunRecord> {
     const startedAt = Date.now();
-    this.runningCount += 1;
     try {
       const command = buildAgentCommand(this.config, {
         agent: record.agent,
@@ -321,9 +362,10 @@ export class AgentRunManager {
   }
 
   private async collectDiff(record: AgentRunRecord): Promise<void> {
-    await runCommand("git", ["add", "-N", "."], record.workspace_path).catch(() => ({ code: 0, stdout: "", stderr: "" }));
-    const names = await runCommand("git", ["diff", "--name-only"], record.workspace_path);
-    const diff = await runCommand("git", ["diff", "--binary", "--no-color"], record.workspace_path);
+    this.writeSafeGitConfig(record.workspace_path);
+    await runGitCommand(["add", "-N", "."], record.workspace_path).catch(() => ({ code: 0, stdout: "", stderr: "" }));
+    const names = await runGitCommand(["diff", "--no-ext-diff", "--name-only"], record.workspace_path);
+    const diff = await runGitCommand(["diff", "--no-ext-diff", "--binary", "--no-color"], record.workspace_path);
     record.changed_files = names.stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -335,7 +377,22 @@ export class AgentRunManager {
     fs.writeFileSync(path.join(record.run_path, "result.json"), JSON.stringify(this.publicRecord(record), null, 2));
     fs.writeFileSync(path.join(record.run_path, "diff.patch"), record.diff || "");
     const artifactPath = path.join(record.run_path, "artifacts.tar.gz");
-    await runCommand("tar", ["-czf", artifactPath, "workspace", "logs", "result.json", "diff.patch"], record.run_path).catch(() => {
+    await runCommand(
+      "tar",
+      [
+        "--exclude",
+        "workspace/.git",
+        "--exclude",
+        "workspace/.git/*",
+        "-czf",
+        artifactPath,
+        "workspace",
+        "logs",
+        "result.json",
+        "diff.patch",
+      ],
+      record.run_path
+    ).catch(() => {
       const fallbackPath = path.join(record.run_path, "artifacts.json");
       fs.writeFileSync(fallbackPath, JSON.stringify(this.publicRecord(record), null, 2));
       record.artifacts_path = fallbackPath;
@@ -348,6 +405,32 @@ export class AgentRunManager {
 
   publicRecord(record: AgentRunRecord): AgentRunRecord {
     return { ...record };
+  }
+
+  private writeSafeGitConfig(workspace: string): void {
+    const gitDir = path.join(workspace, ".git");
+    const gitDirStat = fs.lstatSync(gitDir);
+    if (!gitDirStat.isDirectory() || gitDirStat.isSymbolicLink()) {
+      throw new AgentRunError("Agent workspace git metadata is unsafe", 500, "unsafe_agent_git_metadata");
+    }
+    const configPath = path.join(gitDir, "config");
+    fs.rmSync(configPath, { force: true });
+    fs.writeFileSync(
+      configPath,
+      [
+        "[core]",
+        "\trepositoryformatversion = 0",
+        "\tfilemode = true",
+        "\tbare = false",
+        "\tlogallrefupdates = true",
+        "[diff]",
+        "\texternal =",
+        "[commit]",
+        "\tgpgsign = false",
+        "",
+      ].join("\n"),
+      { mode: 0o600 }
+    );
   }
 
   private cleanupOldRuns(): void {

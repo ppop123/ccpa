@@ -19,7 +19,7 @@ test("buildAgentCommand creates fixed command templates for each CLI agent", () 
   assert.equal(claude.args.includes("--safe-mode"), true);
   assert.deepEqual(
     claude.args.slice(claude.args.indexOf("--allowedTools"), claude.args.indexOf("--allowedTools") + 2),
-    ["--allowedTools", "Read,Write,Edit,Bash"]
+    ["--allowedTools", "Read,Write,Edit"]
   );
 
   const codex = buildAgentCommand(config, {
@@ -29,7 +29,7 @@ test("buildAgentCommand creates fixed command templates for each CLI agent", () 
     workspace: "/tmp/work",
   });
   assert.equal(codex.command, "codex");
-  assert.deepEqual(codex.args, ["exec", "--cd", "/tmp/work", "--sandbox", "read-only", "--ephemeral", "inspect"]);
+  assert.deepEqual(codex.args, ["exec", "--cd", "/tmp/work", "--sandbox", "read-only", "--ephemeral", "--", "inspect"]);
 
   const grok = buildAgentCommand(config, {
     agent: "grok-cli",

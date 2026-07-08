@@ -91,8 +91,9 @@ timeout, retention cleanup, and downloadable artifacts.
 The live runner templates were verified against local CLIs on 2026-07-08:
 
 - Claude Code uses `--safe-mode`, `--no-session-persistence`, and explicit
-  `--allowedTools` lists.
-- Codex CLI uses `codex exec --cd <workspace> --sandbox <mode> --ephemeral`.
+  `--allowedTools` lists. P1 does not expose Claude Bash because no OS sandbox
+  boundary has been verified for that runner; use only with trusted clients.
+- Codex CLI uses `codex exec --cd <workspace> --sandbox <mode> --ephemeral --`.
 - Grok CLI uses `--permission-mode bypassPermissions`, `--always-approve`,
   explicit `--tools` allowlists, and Grok's built-in `read-only` or `workspace`
   sandbox profiles.

@@ -113,13 +113,13 @@ agents:
       command: "claude"
       modes:
         read-only: ["-p", "{prompt}", "--output-format", "json", "--no-session-persistence", "--safe-mode", "--permission-mode", "plan", "--allowedTools", "Read,Grep,Glob,LS"]
-        workspace-write: ["-p", "{prompt}", "--output-format", "json", "--no-session-persistence", "--safe-mode", "--permission-mode", "dontAsk", "--allowedTools", "Read,Write,Edit,Bash"]
+        workspace-write: ["-p", "{prompt}", "--output-format", "json", "--no-session-persistence", "--safe-mode", "--permission-mode", "dontAsk", "--allowedTools", "Read,Write,Edit"]
     codex-cli:
       enabled: true
       command: "codex"
       modes:
-        read-only: ["exec", "--cd", "{workspace}", "--sandbox", "read-only", "--ephemeral", "{prompt}"]
-        workspace-write: ["exec", "--cd", "{workspace}", "--sandbox", "workspace-write", "--ephemeral", "{prompt}"]
+        read-only: ["exec", "--cd", "{workspace}", "--sandbox", "read-only", "--ephemeral", "--", "{prompt}"]
+        workspace-write: ["exec", "--cd", "{workspace}", "--sandbox", "workspace-write", "--ephemeral", "--", "{prompt}"]
     grok-cli:
       enabled: true
       command: "grok"
@@ -135,12 +135,16 @@ P1 can start with built-in templates and expose only the high-level limits in co
 - Existing CCPA API-key middleware protects all `/v1/agent-runs` endpoints.
 - `agents.enabled` defaults to `false`.
 - All upload paths are relative POSIX-like paths. Reject absolute paths, `..`, empty names, backslash traversal, null bytes, symlinks, and oversized files.
+- Reject uploaded VCS metadata paths such as `.git`, `.hg`, and `.svn`; CCPA owns the temporary workspace repository metadata.
 - Decode file content in memory, enforce per-file and total decoded byte limits, then write with `fs.open` flags that prevent accidental directory use.
 - Create a fresh workspace per run and never run agents in the CCPA repo or in caller-provided paths.
 - Use `child_process.spawn(command, argsArray)` without a shell.
 - Kill the process tree on timeout or cancel.
 - Store stdout/stderr in files but return bounded snippets in JSON.
 - Do not put prompt or file content into monitor logs.
+- Before diff collection, rewrite the temporary `.git/config` to a narrow safe
+  config and run git with disabled system/global config, disabled hooks,
+  disabled fsmonitor, and disabled external diff.
 
 ## P2
 

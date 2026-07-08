@@ -33,7 +33,7 @@ export function buildAgentCommand(config: AgentsConfig, input: AgentCommandInput
         "--permission-mode",
         input.mode === "read-only" ? "plan" : "dontAsk",
         "--allowedTools",
-        input.mode === "read-only" ? "Read,Grep,Glob,LS" : "Read,Write,Edit,Bash",
+        input.mode === "read-only" ? "Read,Grep,Glob,LS" : "Read,Write,Edit",
       ],
     };
   }
@@ -49,6 +49,7 @@ export function buildAgentCommand(config: AgentsConfig, input: AgentCommandInput
         "--sandbox",
         input.mode === "read-only" ? "read-only" : "workspace-write",
         "--ephemeral",
+        "--",
         input.prompt,
       ],
     };

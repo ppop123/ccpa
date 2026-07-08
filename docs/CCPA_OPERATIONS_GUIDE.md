@@ -267,6 +267,17 @@ directory. The caller should review and apply `diff` or download
 Completed run directories are retained up to `agents.keep-runs`; older run
 records and artifacts are removed automatically.
 
+CCPA rejects uploaded VCS metadata paths such as `.git`, `.hg`, and `.svn`;
+the temporary git repository is owned by CCPA for diff generation. Before diff
+collection, CCPA rewrites the temporary `.git/config` to a safe config and
+disables hooks, fsmonitor, system/global git config, and external diff.
+
+Claude Code workspace-write runs with `Read`, `Write`, and `Edit` tools only in
+P1. It does not expose Claude Bash until an OS sandbox boundary is verified for
+that runner. Treat Claude Code Agent Runs as trusted-client only: unlike Codex
+and Grok, this runner does not currently have an explicit CCPA-managed OS
+sandbox profile.
+
 Grok headless editing requires `bypassPermissions` plus an explicit built-in
 tool allowlist. CCPA also runs Grok with `--sandbox read-only` for read-only
 requests and `--sandbox workspace` for workspace-write requests, so the Grok
