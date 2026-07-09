@@ -111,6 +111,7 @@ grok:
   auth-file: "~/.grok/auth.json"
   base-url: "https://api.x.ai/v1"
   models:
+    - "grok-4.5"
     - "grok-4.3"
 
 agents:
@@ -164,6 +165,7 @@ grok login --oauth
 ```
 
 然后在 `config.yaml` 里打开 `grok.enabled`，并把要暴露的 Grok 模型写进 `grok.models`。
+已有安装也需要先把 `grok-4.5` 这类新模型 ID 加到本地 `config.yaml` 的 `grok.models` 里再调用。
 
 如果当前只登录了一边 provider，服务仍然可以启动，只是另一边模型不可用；缺失信息会在 `/admin/accounts` 里直接提示。
 

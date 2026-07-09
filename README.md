@@ -115,6 +115,7 @@ grok:
   auth-file: "~/.grok/auth.json"
   base-url: "https://api.x.ai/v1"
   models:
+    - "grok-4.5"
     - "grok-4.3"
 
 agents:
@@ -168,6 +169,7 @@ grok login --oauth
 ```
 
 Then enable `grok.enabled` and list the Grok model IDs you want to expose in `grok.models`.
+Existing installs must add new model IDs such as `grok-4.5` to their local `config.yaml` before calling them.
 
 If only one provider is logged in, the server still starts and only exposes that side. `/admin/accounts` shows what is missing.
 

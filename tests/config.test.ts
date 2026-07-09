@@ -3,8 +3,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "js-yaml";
 
 import { loadConfig } from "../src/config";
+
+test("config.example.yaml exposes current Grok model IDs", () => {
+  const examplePath = path.join(process.cwd(), "config.example.yaml");
+  const example = yaml.load(fs.readFileSync(examplePath, "utf-8")) as any;
+
+  assert.ok(Array.isArray(example.grok?.models));
+  assert.ok(example.grok.models.includes("grok-4.5"));
+  assert.ok(example.grok.models.includes("grok-4.3"));
+});
 
 test("loadConfig uses ccpa auth dir for new default configs", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-config-default-auth-dir-"));

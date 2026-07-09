@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Highlights
+
+- Added the official `grok-4.5` model ID to the Grok example configuration and
+  docs, with upgrade notes for existing local `config.yaml` files.
+
+### Validation
+
+- `npx tsx --test tests/provider-router.test.ts tests/grok-provider.test.ts tests/config.test.ts`
+- `npm run test:unit`
+- `npm run test:ops`
+- `git diff --check`
+
 ## v3.0.0 - 2026-07-06
 
 This release promotes the browser monitor and local contract probes into the

@@ -42,7 +42,7 @@ function makeConfig(authDir: string, grokAuthFile: string, grokEnabled = true): 
       enabled: grokEnabled,
       "auth-file": grokAuthFile,
       "base-url": "https://api.x.ai/v1",
-      models: ["grok-4.3", "grok-build-0.1", "grok-imagine-image"],
+      models: ["grok-4.5", "grok-4.3", "grok-build-0.1", "grok-imagine-image"],
     },
     debug: "off",
   };
@@ -306,7 +306,7 @@ test("createServer exposes Grok models, routes grok chat, and reports Grok admin
       JSON.stringify({
         id: "chatcmpl_grok",
         object: "chat.completion",
-        model: "grok-4.3",
+        model: "grok-4.5",
         choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
         usage: { prompt_tokens: 4, completion_tokens: 1, total_tokens: 5 },
       }),
@@ -327,6 +327,7 @@ test("createServer exposes Grok models, routes grok chat, and reports Grok admin
     headers: { Authorization: "Bearer test-key" },
   });
   assert.equal(models.status, 200);
+  assert.ok(models.body.data.some((model: any) => model.id === "grok-4.5" && model.owned_by === "xai"));
   assert.ok(models.body.data.some((model: any) => model.id === "grok-4.3" && model.owned_by === "xai"));
 
   const admin = await requestJson({
@@ -348,7 +349,7 @@ test("createServer exposes Grok models, routes grok chat, and reports Grok admin
     path: "/v1/chat/completions",
     headers: { Authorization: "Bearer test-key" },
     body: {
-      model: "grok-4.3",
+      model: "grok-4.5",
       messages: [{ role: "user", content: "Reply exactly: ok" }],
     },
   });
