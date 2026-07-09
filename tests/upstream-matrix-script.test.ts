@@ -10,8 +10,15 @@ import { AddressInfo } from "node:net";
 const UPSTREAM_MATRIX_SCRIPT = path.join(process.cwd(), "scripts", "ccpa-upstream-matrix.mjs");
 
 function runMatrix(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("CCPA_")) {
+      delete env[key];
+    }
+  }
+
   return new Promise((resolve) => {
-    execFile(process.execPath, [UPSTREAM_MATRIX_SCRIPT, ...args], { timeout: 30_000 }, (error, stdout, stderr) => {
+    execFile(process.execPath, [UPSTREAM_MATRIX_SCRIPT, ...args], { env, timeout: 30_000 }, (error, stdout, stderr) => {
       resolve({
         code:
           typeof (error as NodeJS.ErrnoException | null)?.code === "number"
@@ -134,6 +141,8 @@ test("upstream matrix defaults to dry-run and does not require config or network
   assert.match(result.stdout, /quota_spending: no/);
   assert.match(result.stdout, /planned checks:/);
   assert.match(result.stdout, /codex chat completions/);
+  assert.match(result.stdout, /codex chat completions: POST \/v1\/chat\/completions model=gpt-5\.6/);
+  assert.match(result.stdout, /codex responses string input: POST \/v1\/responses model=gpt-5\.6/);
   assert.match(result.stdout, /claude responses string input/);
   assert.doesNotMatch(result.stdout, /images generations/);
 });

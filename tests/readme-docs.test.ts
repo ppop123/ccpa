@@ -24,9 +24,17 @@ function isTextFile(fileName: string): boolean {
   return !buffer.includes(0);
 }
 
-function extractReadmeGrokModels(readme: string): string[] {
-  const grokBlock = readme.match(/\ngrok:\n[\s\S]*?\n\nagents:/)?.[0] || "";
-  return Array.from(grokBlock.matchAll(/-\s+"(grok-[^"]+)"/g), (match) => match[1]);
+function extractReadmeProviderModels(readme: string, provider: string, nextBlock: string, prefix: string): string[] {
+  const blockPattern = new RegExp(`\\n${provider}:\\n[\\s\\S]*?\\n\\n${nextBlock}:`);
+  const providerBlock = readme.match(blockPattern)?.[0] || "";
+  const modelPattern = new RegExp(`-\\s+"(${prefix}[^"]+)"`, "g");
+  return Array.from(providerBlock.matchAll(modelPattern), (match) => match[1]);
+}
+
+function matchRequired(text: string, pattern: RegExp, label: string): RegExpMatchArray {
+  const match = text.match(pattern);
+  assert.ok(match, `${label} not found`);
+  return match;
 }
 
 test("Chinese README documents strict external healthcheck log-path contract", () => {
@@ -60,12 +68,52 @@ test("README Grok model examples stay aligned with the example config", () => {
   const englishReadme = readRepoFile("README.md");
   const chineseReadme = readRepoFile("README_CN.md");
   const configuredModels = new Set(exampleConfig.grok.models);
-  const englishModels = extractReadmeGrokModels(englishReadme);
-  const chineseModels = extractReadmeGrokModels(chineseReadme);
+  const englishModels = extractReadmeProviderModels(englishReadme, "grok", "agents", "grok-");
+  const chineseModels = extractReadmeProviderModels(chineseReadme, "grok", "agents", "grok-");
 
+  assert.ok(englishModels.length > 0);
+  assert.ok(chineseModels.length > 0);
   assert.deepEqual(englishModels, chineseModels);
   assert.ok(englishModels.includes("grok-4.5"));
   assert.ok(englishModels.every((model) => configuredModels.has(model)));
+});
+
+test("README Codex model examples stay aligned with the example config", () => {
+  const exampleConfig = yaml.load(readRepoFile("config.example.yaml")) as any;
+  const englishReadme = readRepoFile("README.md");
+  const chineseReadme = readRepoFile("README_CN.md");
+  const configuredModels = new Set(exampleConfig.codex.models);
+  const englishModels = extractReadmeProviderModels(englishReadme, "codex", "grok", "gpt-");
+  const chineseModels = extractReadmeProviderModels(chineseReadme, "codex", "grok", "gpt-");
+
+  assert.ok(englishModels.length > 0);
+  assert.ok(chineseModels.length > 0);
+  assert.deepEqual(englishModels, chineseModels);
+  for (const model of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+    assert.ok(englishModels.includes(model));
+  }
+  assert.ok(englishModels.every((model) => configuredModels.has(model)));
+});
+
+test("Codex smoke defaults stay aligned with the example config", () => {
+  const exampleConfig = yaml.load(readRepoFile("config.example.yaml")) as any;
+  const configuredModels = new Set(exampleConfig.codex.models);
+  const englishReadme = readRepoFile("README.md");
+  const chineseReadme = readRepoFile("README_CN.md");
+  const operationsGuide = readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md");
+  const callHelper = readRepoFile("scripts/call_ccpa.sh");
+  const upstreamMatrix = readRepoFile("scripts/ccpa-upstream-matrix.mjs");
+
+  const defaults = [
+    matchRequired(callHelper, /MODEL="\$\{1:-(gpt-[^"}]+)\}"/, "call_ccpa.sh model default")[1],
+    matchRequired(upstreamMatrix, /const DEFAULT_CODEX_MODEL = "(gpt-[^"]+)";/, "upstream matrix Codex default")[1],
+    matchRequired(englishReadme, /"model": "(gpt-[^"]+)"/, "English README curl model")[1],
+    matchRequired(chineseReadme, /"model": "(gpt-[^"]+)"/, "Chinese README curl model")[1],
+    matchRequired(operationsGuide, /models:\n\s+- "(gpt-[^"]+)"/, "operations guide Codex model")[1],
+  ];
+
+  assert.deepEqual(defaults, Array(defaults.length).fill(defaults[0]));
+  assert.ok(defaults.every((model) => configuredModels.has(model)));
 });
 
 test("tracked text files do not expose the legacy project name", () => {

@@ -6,7 +6,7 @@ import yaml from "js-yaml";
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const API_KEY_RE = /\bsk-[A-Za-z0-9_-]{8,}\b/g;
-const DEFAULT_CODEX_MODEL = "gpt-5.4";
+const DEFAULT_CODEX_MODEL = "gpt-5.6";
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 

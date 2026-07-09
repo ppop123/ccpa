@@ -56,7 +56,7 @@ codex:
   enabled: true
   auth-file: "~/.codex/auth.json"
   models:
-    - "gpt-5.4"
+    - "gpt-5.6"
 ```
 
 `host: ""` listens on all interfaces. For a strictly local process, set

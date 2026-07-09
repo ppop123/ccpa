@@ -7,6 +7,18 @@ import yaml from "js-yaml";
 
 import { loadConfig } from "../src/config";
 
+const GPT_5_6_MODELS = ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+
+test("config.example.yaml exposes current Codex model IDs", () => {
+  const examplePath = path.join(process.cwd(), "config.example.yaml");
+  const example = yaml.load(fs.readFileSync(examplePath, "utf-8")) as any;
+
+  assert.ok(Array.isArray(example.codex?.models));
+  for (const model of GPT_5_6_MODELS) {
+    assert.ok(example.codex.models.includes(model));
+  }
+});
+
 test("config.example.yaml exposes current Grok model IDs", () => {
   const examplePath = path.join(process.cwd(), "config.example.yaml");
   const example = yaml.load(fs.readFileSync(examplePath, "utf-8")) as any;

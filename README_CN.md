@@ -101,6 +101,10 @@ codex:
   enabled: true
   auth-file: "~/.codex/auth.json"
   models:
+    - "gpt-5.6"
+    - "gpt-5.6-sol"
+    - "gpt-5.6-terra"
+    - "gpt-5.6-luna"
     - "gpt-5.4"
     - "gpt-5.4-mini"
     - "gpt-5.2"
@@ -183,7 +187,7 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-5.4",
+    "model": "gpt-5.6",
     "messages": [{"role": "user", "content": "Reply with ok."}],
     "stream": false
   }'
@@ -210,7 +214,7 @@ print(resp.choices[0].message.content)
 ### 本机 shell 包装脚本
 
 ```bash
-./scripts/call_ccpa.sh gpt-5.4 "Reply with ok."
+./scripts/call_ccpa.sh gpt-5.6 "Reply with ok."
 ./scripts/call_ccpa.sh claude-sonnet-4-6 "Reply with ok."
 ```
 
@@ -287,6 +291,10 @@ Claude 便捷别名：
 
 Codex 模型只来自 `codex.models`。
 Grok 模型只来自 `grok.models`，并且需要 `grok.enabled: true`。
+
+当前推荐的 Codex GPT 条目是 `gpt-5.6`、`gpt-5.6-sol`、`gpt-5.6-terra`
+和 `gpt-5.6-luna`。已有安装需要把这些 ID 加到本地 `config.yaml` 后，
+客户端才能通过 CCPA 调用。
 
 运行时关键规则：
 
@@ -459,7 +467,7 @@ npm run upstream:matrix
 如果本机配置已经切到更新的 alias，不需要改脚本，直接覆盖计划里的模型：
 
 ```bash
-npm run upstream:matrix -- --codex-model gpt-5.5 --claude-model claude-opus-4-8
+npm run upstream:matrix -- --codex-model gpt-5.6 --claude-model claude-opus-4-8
 ```
 
 只有显式加 `-- --apply` 才会通过本机 CCPA 发送真实生成请求。默认 apply 矩阵覆盖

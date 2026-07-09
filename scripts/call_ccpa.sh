@@ -7,7 +7,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BASE_URL="${CCPA_BASE_URL:-http://127.0.0.1:8317}"
 CONFIG_PATH="${CCPA_CONFIG:-$REPO_DIR/config.yaml}"
-MODEL="${1:-gpt-5.4}"
+MODEL="${1:-gpt-5.6}"
 PROMPT="${2:-Reply with ok.}"
 
 if [[ ! -f "$CONFIG_PATH" ]]; then

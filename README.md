@@ -105,6 +105,10 @@ codex:
   enabled: true
   auth-file: "~/.codex/auth.json"
   models:
+    - "gpt-5.6"
+    - "gpt-5.6-sol"
+    - "gpt-5.6-terra"
+    - "gpt-5.6-luna"
     - "gpt-5.4"
     - "gpt-5.4-mini"
     - "gpt-5.2"
@@ -187,7 +191,7 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   -H "Authorization: Bearer <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-5.4",
+    "model": "gpt-5.6",
     "messages": [{"role": "user", "content": "Reply with ok."}],
     "stream": false
   }'
@@ -214,7 +218,7 @@ print(resp.choices[0].message.content)
 ### Local shell helper
 
 ```bash
-./scripts/call_ccpa.sh gpt-5.4 "Reply with ok."
+./scripts/call_ccpa.sh gpt-5.6 "Reply with ok."
 ./scripts/call_ccpa.sh claude-sonnet-4-6 "Reply with ok."
 ```
 
@@ -295,6 +299,10 @@ Claude aliases:
 
 Codex models come only from `codex.models`.
 Grok models come only from `grok.models` and require `grok.enabled: true`.
+
+Recommended current GPT entries for Codex are `gpt-5.6`, `gpt-5.6-sol`,
+`gpt-5.6-terra`, and `gpt-5.6-luna`. Existing installs must add those IDs to
+their local `config.yaml` before clients can call them through CCPA.
 
 Important runtime rules:
 
@@ -509,7 +517,7 @@ If your local config has moved to newer aliases, override the planned models
 without editing the script:
 
 ```bash
-npm run upstream:matrix -- --codex-model gpt-5.5 --claude-model claude-opus-4-8
+npm run upstream:matrix -- --codex-model gpt-5.6 --claude-model claude-opus-4-8
 ```
 
 Add `-- --apply` only when you want to send real generation requests through the

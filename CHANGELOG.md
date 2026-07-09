@@ -4,11 +4,18 @@
 
 ### Highlights
 
+- Added the official GPT-5.6 Codex/OpenAI model family to the Codex example
+  configuration and docs: `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, and
+  `gpt-5.6-luna`, with upgrade notes for existing local `config.yaml` files.
+- Switched local Codex text smoke defaults to `gpt-5.6` for
+  `scripts/call_ccpa.sh` and `npm run upstream:matrix`.
 - Added the official `grok-4.5` model ID to the Grok example configuration and
   docs, with upgrade notes for existing local `config.yaml` files.
 
 ### Validation
 
+- `npx tsx --test tests/provider-router.test.ts tests/config.test.ts tests/codex-provider-status.test.ts`
+- `npx tsx --test tests/readme-docs.test.ts tests/upstream-matrix-script.test.ts`
 - `npx tsx --test tests/provider-router.test.ts tests/grok-provider.test.ts tests/config.test.ts`
 - `npm run test:unit`
 - `npm run test:ops`

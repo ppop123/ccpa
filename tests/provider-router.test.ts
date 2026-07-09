@@ -11,6 +11,12 @@ test("gpt-5.4 routes to codex", () => {
   assert.equal(resolveProviderFromModel("gpt-5.4"), "codex");
 });
 
+test("gpt-5.6 family routes to codex", () => {
+  for (const model of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+    assert.equal(resolveProviderFromModel(model), "codex");
+  }
+});
+
 test("gpt-5.4-mini routes to codex", () => {
   assert.equal(resolveProviderFromModel("gpt-5.4-mini"), "codex");
 });

@@ -56,6 +56,10 @@ codex:
   # Default request persistence for Codex upstream calls. Client `store` overrides this.
   store: false
   models:
+    - "gpt-5.6"
+    - "gpt-5.6-sol"
+    - "gpt-5.6-terra"
+    - "gpt-5.6-luna"
     - "gpt-5.4"
     - "gpt-5.4-mini"
     - "gpt-5.2"

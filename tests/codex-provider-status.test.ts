@@ -15,6 +15,7 @@ import { TokenData } from "../src/auth/types";
 import { CodexProvider } from "../src/providers/codex";
 
 const PACKAGE_VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")).version;
+const GPT_5_6_MODELS = ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
 
 function makeConfig(authDir: string, codexAuthFile: string): Config {
   return {
@@ -37,7 +38,7 @@ function makeConfig(authDir: string, codexAuthFile: string): Config {
     codex: {
       enabled: true,
       "auth-file": codexAuthFile,
-      models: ["gpt-5.4", "gpt-5.4-mini"],
+      models: [...GPT_5_6_MODELS, "gpt-5.4", "gpt-5.4-mini"],
     },
     debug: "off",
   };
@@ -162,7 +163,7 @@ test("CodexProvider lists configured models", () => {
 
   assert.deepEqual(
     provider.listModels().map((model) => model.id),
-    ["gpt-5.4", "gpt-5.4-mini"]
+    [...GPT_5_6_MODELS, "gpt-5.4", "gpt-5.4-mini"]
   );
 });
 
@@ -216,6 +217,10 @@ test("CodexProvider supports only configured models when enabled", () => {
   const config = makeConfig(tmpDir, path.join(tmpDir, ".codex", "auth.json"));
   const provider = new CodexProvider(config);
 
+  assert.equal(provider.supportsModel("gpt-5.6"), true);
+  assert.equal(provider.supportsModel("gpt-5.6-sol"), true);
+  assert.equal(provider.supportsModel("gpt-5.6-terra"), true);
+  assert.equal(provider.supportsModel("gpt-5.6-luna"), true);
   assert.equal(provider.supportsModel("gpt-5.4"), true);
   assert.equal(provider.supportsModel("gpt-5.2"), false);
 });
@@ -259,6 +264,10 @@ test("server exposes Claude and Codex models and provider status", async (t) => 
 
   assert.equal(modelsResp.status, 200);
   assert.ok(modelsResp.body.data.some((model: any) => model.id === "claude-sonnet-4-6"));
+  assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.6"));
+  assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.6-sol"));
+  assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.6-terra"));
+  assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.6-luna"));
   assert.ok(modelsResp.body.data.some((model: any) => model.id === "gpt-5.4"));
 
   const adminResp = await requestJson({
