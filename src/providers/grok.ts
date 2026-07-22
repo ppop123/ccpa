@@ -218,6 +218,14 @@ export class GrokProvider implements Provider {
         throw error;
       }
 
+      // 预防式自续期:过期或临近过期(提前窗口)时先用 refresh_token 换新,失败再走原有报错路径
+      if (this.authStore.needsRefresh(auth)) {
+        const refreshed = await this.authStore.refresh(auth);
+        if (refreshed) {
+          auth = refreshed;
+        }
+      }
+
       if (auth.expired) {
         setFailureContext(res, {
           stage: "auth",
@@ -244,12 +252,17 @@ export class GrokProvider implements Provider {
 
   private async callUpstream(endpointPath: string, body: unknown, auth: GrokAuthSnapshot): Promise<Response> {
     const response = await this.fetchWithAuth(endpointPath, body, auth);
-    if (response.status !== 401) {
+    // x.ai 对失效 token 实测回 403(unauthenticated:bad-credentials),401 也一并兜底
+    if (response.status !== 401 && response.status !== 403) {
       return response;
     }
 
-    const refreshed = this.authStore.reloadAfterAuthFailure(auth);
+    // 先看文件是否已被别人(grok CLI)续过;没有就自己用 refresh_token 续一次
+    let refreshed = this.authStore.reloadAfterAuthFailure(auth);
     if (!refreshed || refreshed.expired) {
+      refreshed = await this.authStore.refresh(auth);
+    }
+    if (!refreshed || refreshed.expired || refreshed.accessToken === auth.accessToken) {
       return response;
     }
 
