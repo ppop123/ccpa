@@ -69,10 +69,11 @@ async function isCredential403(response: Response): Promise<boolean> {
         : typeof (body.error as Record<string, unknown> | undefined)?.["message"] === "string"
           ? String((body.error as Record<string, unknown>)["message"])
           : "";
+    // 只认实测的失效形态,勿放宽:scope/权限类 403 也会提 access token,不能拿去续期(Codex R2)
     return (
       code.startsWith("unauthenticated") ||
       code.includes("bad-credentials") ||
-      /access token/i.test(message)
+      /could not be validated/i.test(message)
     );
   } catch {
     return false;
