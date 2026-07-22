@@ -58,6 +58,27 @@ async function readUpstreamBody(response: Response): Promise<unknown> {
   return text || null;
 }
 
+/** 403 是否属于凭据失效(实测形态:{"code":"unauthenticated:bad-credentials","error":"The OAuth2 access token could not be validated."})。clone 读体,原响应保持可转发。 */
+async function isCredential403(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.clone().json()) as Record<string, unknown>;
+    const code = typeof body.code === "string" ? body.code : "";
+    const message =
+      typeof body.error === "string"
+        ? body.error
+        : typeof (body.error as Record<string, unknown> | undefined)?.["message"] === "string"
+          ? String((body.error as Record<string, unknown>)["message"])
+          : "";
+    return (
+      code.startsWith("unauthenticated") ||
+      code.includes("bad-credentials") ||
+      /access token/i.test(message)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function setJsonResponse(res: express.Response, upstream: Response, body: unknown): void {
   const contentType = upstream.headers.get("content-type");
   if (isJsonContentType(contentType) || body === null || typeof body !== "string") {
@@ -133,6 +154,22 @@ export class GrokProvider implements Provider {
     try {
       const snapshot = this.authStore.load();
       if (snapshot.expired) {
+        // 有 refresh_token 即可自愈(请求路径会自动续期)——启动门禁不应因此拒启(Codex P1)
+        if (this.authStore.needsRefresh(snapshot)) {
+          return {
+            name: this.name,
+            available: true,
+            details: {
+              enabled: true,
+              configured: true,
+              expired: true,
+              refreshable: true,
+              expiresAt: snapshot.expiresAt,
+              path: snapshot.path,
+              hint: "Access token expired; will self-refresh via refresh_token grant on first request.",
+            },
+          };
+        }
         return {
           name: this.name,
           available: false,
@@ -252,8 +289,15 @@ export class GrokProvider implements Provider {
 
   private async callUpstream(endpointPath: string, body: unknown, auth: GrokAuthSnapshot): Promise<Response> {
     const response = await this.fetchWithAuth(endpointPath, body, auth);
-    // x.ai 对失效 token 实测回 403(unauthenticated:bad-credentials),401 也一并兜底
-    if (response.status !== 401 && response.status !== 403) {
+    // x.ai 对失效 token 实测回 403(unauthenticated:bad-credentials),401 也一并兜底;
+    // 非凭据类 403(配额/权限/策略)原样转发,不动 token(Codex P2)
+    if (response.status === 401) {
+      // fall through to refresh
+    } else if (response.status === 403) {
+      if (!(await isCredential403(response))) {
+        return response;
+      }
+    } else {
       return response;
     }
 

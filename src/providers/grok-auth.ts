@@ -248,6 +248,8 @@ export class GrokAuthStore {
           refresh_token: current.refreshToken,
           client_id: current.clientId,
         }),
+        // 有界超时:auth.x.ai 卡死时放弃续期,回退用现有 token(预防式续期时它还没真过期)
+        signal: AbortSignal.timeout(15_000),
       });
       if (!response.ok) {
         return null;

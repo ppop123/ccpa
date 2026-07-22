@@ -150,6 +150,99 @@ test("先重读:文件已被外部(grok CLI)续过时直接采用,不打端点",
   }
 });
 
+test("getStatus 门禁:过期但可续期 → available(启动不拒);过期且无 refresh_token → unavailable", async () => {
+  const { GrokProvider } = await import("../src/providers/grok");
+  const authPath = tempAuthPath();
+
+  const makeCfg = (file: string) =>
+    ({
+      grok: { enabled: true, "auth-file": file, "base-url": "https://api.x.ai/v1", models: ["grok-4.5"] },
+    }) as any;
+
+  writeAuthFile(authPath, { expiresInMs: -1000 });
+  let status = new GrokProvider(makeCfg(authPath)).getStatus();
+  assert.equal(status.available, true, "可续期的过期态应放行");
+  assert.equal((status.details as any).refreshable, true);
+
+  writeAuthFile(authPath, { refreshToken: null, expiresInMs: -1000 });
+  status = new GrokProvider(makeCfg(authPath)).getStatus();
+  assert.equal(status.available, false, "不可续期的过期态应拦截");
+});
+
+test("403 甄别:凭据类 403 触发续期重试,非凭据类 403 原样转发不动 token", async () => {
+  const { GrokProvider } = await import("../src/providers/grok");
+  const express = (await import("express")).default;
+  const { createServer } = await import("node:http");
+
+  // 假上游:第一次回 403,第二次回 200;两种 403 形态分别测
+  async function runCase(firstBody: unknown, expectRetry: boolean): Promise<{ upstreamHits: number; tokenHits: number; status: number }> {
+    let upstreamHits = 0;
+    const app = express();
+    app.use(express.json());
+    app.post("/v1/chat/completions", (req, res) => {
+      upstreamHits += 1;
+      if (upstreamHits === 1) {
+        res.status(403).json(firstBody);
+      } else {
+        res.status(200).json({ ok: true });
+      }
+    });
+    const upstream = createServer(app);
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    const upstreamPort = (upstream.address() as any).port;
+
+    const authPath = tempAuthPath();
+    writeAuthFile(authPath, { expiresInMs: 60 * 60 * 1000 });
+
+    let tokenHits = 0;
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+      if (String(input).includes("auth.x.ai")) {
+        tokenHits += 1;
+        return tokenResponse();
+      }
+      return fetchOriginal(input, init);
+    }) as typeof fetch;
+
+    const provider = new GrokProvider({
+      grok: { enabled: true, "auth-file": authPath, "base-url": `http://127.0.0.1:${upstreamPort}/v1`, models: ["grok-4.5"] },
+    } as any);
+
+    const proxyApp = express();
+    proxyApp.use(express.json());
+    proxyApp.post("/v1/chat/completions", provider.handleChatCompletions());
+    const proxy = createServer(proxyApp);
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const proxyPort = (proxy.address() as any).port;
+
+    try {
+      const r = await fetchOriginal(`http://127.0.0.1:${proxyPort}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "grok-4.5", messages: [] }),
+      });
+      return { upstreamHits, tokenHits, status: r.status };
+    } finally {
+      globalThis.fetch = fetchOriginal;
+      upstream.close();
+      proxy.close();
+    }
+  }
+
+  const cred = await runCase(
+    { code: "unauthenticated:bad-credentials", error: "The OAuth2 access token could not be validated." },
+    true
+  );
+  assert.equal(cred.tokenHits, 1, "凭据 403 应触发一次续期");
+  assert.equal(cred.upstreamHits, 2, "凭据 403 应重试上游");
+  assert.equal(cred.status, 200);
+
+  const policy = await runCase({ error: { message: "model not entitled for this team" } }, false);
+  assert.equal(policy.tokenHits, 0, "非凭据 403 不应动 token");
+  assert.equal(policy.upstreamHits, 1, "非凭据 403 不应重试");
+  assert.equal(policy.status, 403);
+});
+
 test("refresh 失败(端点 4xx):返回 null,文件不动", async () => {
   const authPath = tempAuthPath();
   writeAuthFile(authPath, { expiresInMs: -1000 });
