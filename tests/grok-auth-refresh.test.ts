@@ -76,6 +76,22 @@ test("needsRefresh: fresh token → false;临近过期/已过期 → true;无 re
   assert.equal(store.needsRefresh(store.load()), false);
 });
 
+test("load: grok CLI 更新 auth.json mtime 后直接重读新凭据", () => {
+  const authPath = tempAuthPath();
+  writeAuthFile(authPath, { key: "old-access-token" });
+  const store = new GrokAuthStore(authPath);
+
+  assert.equal(store.load().accessToken, "old-access-token");
+
+  writeAuthFile(authPath, { key: "cli-login-access-token", refreshToken: "cli-refresh-token" });
+  const updatedMtime = new Date(Date.now() + 2_000);
+  fs.utimesSync(authPath, updatedMtime, updatedMtime);
+
+  const reloaded = store.load();
+  assert.equal(reloaded.accessToken, "cli-login-access-token");
+  assert.equal(reloaded.refreshToken, "cli-refresh-token");
+});
+
 test("refresh 成功:回写轮换后的 access/refresh token 与新 expires_at,原子无残留", async () => {
   const authPath = tempAuthPath();
   writeAuthFile(authPath, { expiresInMs: -1000 });

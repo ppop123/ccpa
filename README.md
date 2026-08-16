@@ -86,7 +86,8 @@ fallback, but new installs should use the current `com.wy.ccpa.plist` naming.
 ## 5-minute setup
 
 1. Put a real API key in `config.yaml`.
-2. Configure the Codex model allowlist in `codex.models`.
+2. Enable only the providers you intend to use, and configure their
+   `codex.models` / `grok.models` allowlists.
 3. Log in to the providers you want.
 4. Start the server.
 
@@ -181,7 +182,37 @@ Then enable `grok.enabled` and list the Grok model IDs you want to expose in `gr
 Existing installs must add new model IDs such as `grok-4.6` and
 `grok-imagine-image-2.0` to their local `config.yaml` before calling them.
 
-If only one provider is logged in, the server still starts and only exposes that side. `/admin/accounts` shows what is missing.
+Verify the CLI login from its output, not from the exit status alone:
+
+```bash
+grok models
+```
+
+The output must confirm that you are logged in and must not contain
+`You are not authenticated`, `No auth credentials`, or
+`Failed to fetch models: Auth`.
+CCPA re-reads the OAuth file when it changes, so completing `grok login --oauth`
+is picked up without a restart when the CLI updates the same file resolved by
+`grok.auth-file`. If a different custom auth path already exists, point the
+configuration at the CLI-managed file and restart. Changing `grok.enabled`,
+`grok.models`, or the running build still requires the corresponding config
+restart or rebuild and restart. On the CCPA side, verify that `/admin/accounts`
+reports `grok.available: true`. `/v1/models` shows configured model exposure only;
+confirm it contains `grok-4.6` plus any required image model, but do not treat
+the list as an auth check.
+`npm run canary -- --require-provider-status degraded` checks the aggregated
+`/admin/accounts.server.provider_status` and accepts `degraded`. Claude and
+Codex always participate in that summary, while Grok participates only when
+`grok.enabled: true`; a Grok-only setup therefore normally remains `degraded`.
+Reserve `--require-provider-status ok` for a deployment where Claude and Codex,
+plus Grok when enabled, must all be ready. Neither check proves Grok entitlement
+upstream. A `degraded` canary can still pass when another provider is available
+while Grok is down, so never skip the explicit `grok.available: true` check. A
+deliberately small Grok request is the final end-to-end check and spends quota.
+
+If only one provider is logged in, the server can still start. `/v1/models` may
+list configured IDs for an unavailable provider; `/admin/accounts` is the
+readiness source, and calls to that provider fail until its login is restored.
 
 ## Call it from scripts
 
@@ -262,6 +293,25 @@ Chat allowlist is `model`, `messages`, `search_parameters`, `stream`,
 Chat field fails closed with HTTP 400 `unsupported_legacy_search_parameter`.
 `mode: off` removes `search_parameters` and continues as an ordinary Chat
 request.
+The allowed field names do not remove value-level limits: `messages` must be
+simple text, `n` must be omitted or `1`, token limits must be positive integers
+and agree when both aliases are present, and `reasoning` cannot be combined with
+`reasoning_effort`.
+For these value constraints, malformed message arrays or roles and invalid token
+limit types or values return HTTP 400 `invalid_parameter`. Values that cannot be
+translated losslessly—non-text or extra message fields such as `name`, `n` other
+than `1`, both reasoning forms, or conflicting token-limit aliases—return HTTP
+400 `unsupported_legacy_search_parameter`.
+
+If a caller still receives upstream
+`410 Live search is deprecated, switch to Agent Tools API`, inspect both its
+payload and the running build. CCPA bridges
+only the documented non-stream `search_parameters` subset; other deprecated
+Live Search shapes must move directly to `POST /v1/responses`. If the request is
+already in the supported subset and build metadata is present, compare
+`/health.build.git_commit` with `git rev-parse HEAD`, then rebuild and restart
+CCPA if the live process is older. Development mode may omit build metadata; in
+that case restart the development process before reproducing the request.
 
 ### Local shell helper
 
@@ -417,7 +467,7 @@ Important runtime rules:
 | `GET /v1/agent-runs/:id/artifacts` | Download agent run artifact archive |
 | `POST /v1/messages` | Claude native messages |
 | `POST /v1/messages/count_tokens` | Claude native token counting |
-| `GET /v1/models` | List available models |
+| `GET /v1/models` | List model IDs exposed by configuration; readiness is separate |
 | `GET /admin/accounts` | Provider availability and login hints |
 | `GET /admin/usage` | Aggregate usage counters |
 | `GET /admin/usage/recent` | Recent request summaries |
@@ -485,14 +535,14 @@ the key. It checks `/health`, `/admin/accounts`, `/v1/models`, and the expected
 JSON 404 from `/v1/embeddings`; it does not send a real model-generation
 request upstream. It also requires provider readiness of `degraded` or better
 by default, meaning at least one provider must be available. Use
-`--require-provider-status ok` when you want all enabled providers ready, or
-`--require-provider-status any` for diagnostics that should only verify the
-server contract.
+`--require-provider-status ok` when Claude and Codex, plus Grok when enabled,
+must all be ready, or `--require-provider-status any` for diagnostics that
+should only verify the server contract.
 
 When `dist/index.js` exists locally, the canary also checks that the live
-process started after the local dist build time. Use `--no-dist-check` when
-checking a remote instance from a machine that does not share the same dist
-files.
+process started after the local dist build time. Use `--no-dist-check` for a
+development process not served from that build, or when checking a remote
+instance from a machine that does not share the same dist files.
 
 `npm run build` writes `dist/build-info.json`, and `/health` exposes the build
 git commit. When you need to prove that the live process is running a specific
@@ -592,7 +642,8 @@ release gate.
 
 The default rollout preflight requirement is `degraded`, meaning at least one
 provider is available. Use `npm run release:verify -- --require-provider-status
-ok` when the handoff must prove all enabled providers are ready.
+ok` when the handoff must prove Claude and Codex, plus Grok when enabled, are
+all ready.
 When `--require-external-healthcheck-dir` is set, rollout preflight also treats
 the external wrapper's log-maintenance exports as part of the strict contract:
 the wrapper must enable `CCPA_HEALTHCHECK_MAINTAIN_LOGS` and set `CCPA_LOG_PATHS`

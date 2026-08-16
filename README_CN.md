@@ -81,7 +81,8 @@ cp config.example.yaml config.yaml
 ## 5 分钟跑起来
 
 1. 在 `config.yaml` 里填一个正式 API key。
-2. 在 `codex.models` 里填允许访问的 Codex 模型。
+2. 只启用需要的 provider，并配置对应的 `codex.models` / `grok.models`
+   模型白名单。
 3. 登录你要用的 provider。
 4. 启动服务。
 
@@ -176,7 +177,32 @@ grok login --oauth
 已有安装也需要先把 `grok-4.6`、`grok-imagine-image-2.0` 这类新模型 ID
 加到本地 `config.yaml` 的 `grok.models` 里再调用。
 
-如果当前只登录了一边 provider，服务仍然可以启动，只是另一边模型不可用；缺失信息会在 `/admin/accounts` 里直接提示。
+验证 CLI 登录时要看输出语义，不要只看退出码：
+
+```bash
+grok models
+```
+
+输出必须明确确认已经登录，并且不能出现 `You are not authenticated`、
+`No auth credentials` 或 `Failed to fetch models: Auth`。认证文件变化后，
+CCPA 会重新读取 OAuth 文件，因此当 CLI 更新的是 `grok.auth-file` 实际解析到的
+同一文件时，只完成 `grok login --oauth` 无需重启。如果已有另一个自定义认证路径，
+应把配置指向 CLI 管理的文件并重启。修改 `grok.enabled`、`grok.models` 或运行中的
+构建版本，仍需要按变更类型重启配置，或重新构建后重启。CCPA 侧应确认
+`/admin/accounts` 返回 `grok.available: true`。`/v1/models` 只表示配置后暴露的
+模型列表；应确认其中包含 `grok-4.6` 和所需图片模型，但不能把它当作认证检查。
+`npm run canary -- --require-provider-status degraded` 检查聚合后的
+`/admin/accounts.server.provider_status`，并接受 `degraded`。Claude 和 Codex
+始终参与该汇总，Grok 只有在 `grok.enabled: true` 时才参与；因此
+Grok-only 配置通常仍是 `degraded`。只有在部署要求 Claude 和 Codex，
+以及启用时的 Grok 全部 ready 时，才使用 `--require-provider-status ok`。
+这两种检查都不能证明 Grok 拥有上游 entitlement。当其他 provider 可用而
+Grok 异常时，`degraded` canary 仍可能通过，所以不能跳过显式的
+`grok.available: true` 检查。最终端到端验收需要一次刻意保持最小的
+Grok 请求，并会消耗额度。
+
+如果当前只登录了一边 provider，服务仍然可以启动。`/v1/models` 可能继续列出另一个
+不可用 provider 的已配置模型；是否可用应以 `/admin/accounts` 为准，登录恢复前调用会失败。
 
 ## 给脚本调用
 
@@ -254,6 +280,22 @@ Chat 响应不会返回顶层 `citations`。不支持的调用请迁移到 Respo
 `reasoning` 和 `n`；其他 Chat 字段会失败关闭并返回 HTTP 400
 `unsupported_legacy_search_parameter`。`mode: off` 会移除 `search_parameters`，
 然后按普通 Chat 请求继续处理。
+字段名在白名单内也仍有值级限制：`messages` 只能是简单文本，`n` 只能省略或为
+`1`，两个 token 上限必须是正整数且同时出现时值一致，`reasoning` 不能与
+`reasoning_effort` 同时出现。
+对这些值约束，message 数组或 role 非法，token 上限类型或值非法时返回
+HTTP 400 `invalid_parameter`。无法无损转换的值——非文本或含 `name` 等额外字段的
+message、`n` 不为 `1`、两种 reasoning 形态并存，或两个 token 上限冲突——返回
+HTTP 400 `unsupported_legacy_search_parameter`。
+
+如果调用方仍收到上游
+`410 Live search is deprecated, switch to Agent Tools API`，需要同时检查实际请求体
+和正在运行的构建。CCPA 只桥接文档列出的非流式
+`search_parameters` 子集；其他旧 Live Search 形态必须直接迁移到
+`POST /v1/responses`。如果请求已经属于支持子集，请检查
+`/health.build.git_commit` 并与 `git rev-parse HEAD` 比较。如果它运行的是旧构建，
+重新构建并重启 CCPA。开发模式可能没有构建元数据；此时先重启开发进程，
+再重现请求。
 
 ### 本机 shell 包装脚本
 
@@ -404,7 +446,7 @@ Grok 模型只来自 `grok.models`，并且需要 `grok.enabled: true`。
 | `GET /v1/agent-runs/:id/artifacts` | 下载 agent run artifact 归档 |
 | `POST /v1/messages` | Claude 原生消息接口 |
 | `POST /v1/messages/count_tokens` | Claude 原生 token 计数接口 |
-| `GET /v1/models` | 列出可用模型 |
+| `GET /v1/models` | 列出配置后暴露的模型 ID；可用性需另查 provider 状态 |
 | `GET /admin/accounts` | 查看 provider 可用性和登录提示 |
 | `GET /admin/usage` | 查看聚合使用统计 |
 | `GET /admin/usage/recent` | 查看最近请求摘要 |
@@ -457,9 +499,9 @@ http://127.0.0.1:8317/monitor
 npm run canary -- --url http://127.0.0.1:8317
 ```
 
-canary 默认从 `config.yaml` 读取 `api-keys[0]`，不会打印 key。它检查 `/health`、`/admin/accounts`、`/v1/models`，以及 `/v1/embeddings` 是否返回预期的 JSON 404；不会向上游发送真实模型生成请求。默认还要求 provider readiness 至少达到 `degraded`，也就是至少一个 provider 可用。发布或完整巡检时可以加 `--require-provider-status ok` 要求所有启用的 provider 都可用；排障时可以用 `--require-provider-status any` 只检查服务契约。
+canary 默认从 `config.yaml` 读取 `api-keys[0]`，不会打印 key。它检查 `/health`、`/admin/accounts`、`/v1/models`，以及 `/v1/embeddings` 是否返回预期的 JSON 404；不会向上游发送真实模型生成请求。默认还要求 provider readiness 至少达到 `degraded`，也就是至少一个 provider 可用。发布或完整巡检时可以加 `--require-provider-status ok`，要求 Claude 和 Codex，以及启用时的 Grok 全部可用；排障时可以用 `--require-provider-status any` 只检查服务契约。
 
-如果本机存在 `dist/index.js`，canary 还会检查 live 进程的启动时间是否晚于本地 dist 构建时间。跨机器检查远端实例、且本机不共享同一份 dist 文件时，可以加 `--no-dist-check`。
+如果本机存在 `dist/index.js`，canary 还会检查 live 进程的启动时间是否晚于本地 dist 构建时间。开发进程不是从该构建启动，或跨机器检查远端实例且本机不共享同一份 dist 文件时，可以加 `--no-dist-check`。
 
 `npm run build` 会写入 `dist/build-info.json`，`/health` 会暴露当前构建的 git commit。需要证明 live 进程确实跑某个候选提交时，可以加：
 

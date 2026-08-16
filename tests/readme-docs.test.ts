@@ -37,6 +37,43 @@ function matchRequired(text: string, pattern: RegExp, label: string): RegExpMatc
   return match;
 }
 
+function extractMarkdownSection(markdown: string, heading: string): string {
+  const marker = `## ${heading}`;
+  const lines = markdown.split(/\r?\n/);
+  let inFence = false;
+  let start = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (/^(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence;
+    } else if (!inFence && line === marker) {
+      start = index;
+      break;
+    }
+  }
+  assert.notEqual(start, -1, `${marker} not found`);
+
+  inFence = false;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (/^(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence;
+    } else if (!inFence && /^##\s+/.test(line)) {
+      return lines.slice(start + 1, index).join("\n");
+    }
+  }
+  return lines.slice(start + 1).join("\n");
+}
+
+function extractParagraphContaining(markdown: string, needle: string, label: string): string {
+  const matches = markdown
+    .split(/\n\s*\n/)
+    .filter((paragraph) => paragraph.includes(needle));
+  assert.equal(matches.length, 1, `${label} should appear in exactly one paragraph`);
+  return matches[0];
+}
+
 test("Chinese README documents strict external healthcheck log-path contract", () => {
   const englishReadme = readRepoFile("README.md");
   const chineseReadme = readRepoFile("README_CN.md");
@@ -165,6 +202,127 @@ test("Grok search docs prefer Responses Agent Tools and state legacy bridge limi
   assert.match(agentGuide, /safe_search/);
   assert.match(agentGuide, /legacy_live_search_streaming_unsupported/);
   assert.match(agentGuide, /unsupported_legacy_search_parameter/);
+});
+
+test("Grok OAuth docs explain login verification and reload boundaries", () => {
+  const englishReadme = readRepoFile("README.md");
+  const chineseReadme = readRepoFile("README_CN.md");
+  const detailedDocs = [
+    readRepoFile("docs/AGENT_GUIDE.md"),
+    readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"),
+  ];
+
+  for (const body of [englishReadme, chineseReadme, ...detailedDocs]) {
+    assert.match(body, /grok login --oauth/);
+    assert.match(body, /grok models/);
+    assert.match(body, /\/admin\/accounts/);
+    assert.match(body, /grok\.available/);
+    assert.match(body, /\/v1\/models/);
+    assert.match(body, /server\.provider_status/);
+    assert.match(body, /--require-provider-status degraded/);
+  }
+
+  assert.match(englishReadme, /re-reads the OAuth file.*without a restart/is);
+  assert.match(chineseReadme, /重新读取 OAuth 文件.*无需重启/is);
+
+  for (const body of detailedDocs) {
+    assert.match(body, /grok\.enabled/);
+    assert.match(body, /grok\.models/);
+    assert.match(body, /restart/i);
+  }
+});
+
+test("quick setup covers Grok-only configuration", () => {
+  const englishQuickSetup = extractMarkdownSection(readRepoFile("README.md"), "5-minute setup");
+  const chineseQuickSetup = extractMarkdownSection(readRepoFile("README_CN.md"), "5 分钟跑起来");
+  const operationsConfiguration = extractMarkdownSection(
+    readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"),
+    "Configuration"
+  );
+
+  assert.match(englishQuickSetup, /Enable[^\n]*providers[\s\S]{0,100}`codex\.models` \/ `grok\.models`/i);
+  assert.match(chineseQuickSetup, /启用需要的 provider[\s\S]{0,100}`codex\.models` \/ `grok\.models`/);
+  assert.match(operationsConfiguration, /grok:\s+enabled:\s+false/is);
+  assert.match(operationsConfiguration, /grok-4\.6/);
+
+  const decoy = extractMarkdownSection(
+    ["## Target details", "grok-4.6", "", "## Target", "expected", "", "## Old Reference", "grok-4.6"].join("\n"),
+    "Target"
+  );
+  assert.match(decoy, /expected/);
+  assert.doesNotMatch(decoy, /grok-4\.6/);
+});
+
+test("Grok docs distinguish auth readiness from configured model exposure", () => {
+  const englishSections = [
+    extractMarkdownSection(readRepoFile("README.md"), "Login"),
+    extractMarkdownSection(readRepoFile("docs/AGENT_GUIDE.md"), "First-Time Setup"),
+    extractMarkdownSection(readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"), "Provider Setup"),
+  ];
+  const chineseSection = extractMarkdownSection(readRepoFile("README_CN.md"), "登录");
+
+  for (const section of englishSections) {
+    const paragraph = extractParagraphContaining(
+      section,
+      "reports `grok.available: true`",
+      "English Grok readiness paragraph"
+    );
+    assert.match(paragraph, /grok\.auth-file/);
+    assert.match(paragraph, /same\s+file/is);
+    assert.match(paragraph, /`(?:GET )?\/v1\/models`/);
+    assert.match(paragraph, /configured model exposure only/);
+    assert.match(paragraph, /auth\s+check/);
+    assert.match(section, /--require-provider-status degraded/);
+    assert.doesNotMatch(paragraph, /npm run canary -- --require-provider-status ok/);
+    assert.match(section, /can still pass[\s\S]{0,100}Grok\s+is\s+down/);
+  }
+
+  const chineseParagraph = extractParagraphContaining(
+    chineseSection,
+    "`/admin/accounts` 返回 `grok.available: true`",
+    "Chinese Grok readiness paragraph"
+  );
+  assert.match(chineseParagraph, /grok\.auth-file/);
+  assert.match(chineseParagraph, /同一文件/is);
+  assert.match(chineseParagraph, /`\/v1\/models` 只表示配置后暴露的/);
+  assert.match(chineseParagraph, /不能把它当作认证检查/);
+  assert.match(chineseSection, /--require-provider-status degraded/);
+  assert.doesNotMatch(chineseParagraph, /npm run canary -- --require-provider-status ok/);
+  assert.match(chineseSection, /Grok\s+异常[\s\S]{0,80}仍可能通过/);
+});
+
+test("Grok docs turn the deprecated Live Search 410 into migration guidance", () => {
+  const docs = [
+    readRepoFile("README.md"),
+    readRepoFile("README_CN.md"),
+    readRepoFile("docs/AGENT_GUIDE.md"),
+    readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"),
+  ];
+
+  for (const body of docs) {
+    assert.match(body, /Live search is deprecated, switch to Agent Tools API/);
+    assert.match(body, /POST \/v1\/responses/);
+    assert.match(body, /search_parameters/);
+    assert.match(body, /\/health\.build\.git_commit/);
+    assert.match(body, /git rev-parse HEAD/);
+    assert.match(body, /build metadata|构建元数据|built deployment|构建部署/i);
+  }
+});
+
+test("Grok legacy bridge docs name both validation error codes", () => {
+  const sections = [
+    extractMarkdownSection(readRepoFile("README.md"), "Call it from scripts"),
+    extractMarkdownSection(readRepoFile("README_CN.md"), "给脚本调用"),
+    extractMarkdownSection(readRepoFile("docs/AGENT_GUIDE.md"), "OpenAI-Compatible Calls"),
+    extractMarkdownSection(readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"), "Grok Search And Images"),
+  ];
+
+  for (const section of sections) {
+    assert.match(section, /invalid_parameter/);
+    assert.match(section, /unsupported_legacy_search_parameter/);
+    assert.match(section, /message arrays or roles|message 数组或 role/);
+    assert.match(section, /extra message fields|name` 等额外字段/);
+  }
 });
 
 test("README Codex model examples stay aligned with the example config", () => {

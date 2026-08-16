@@ -57,6 +57,12 @@ codex:
   auth-file: "~/.codex/auth.json"
   models:
     - "gpt-5.6"
+
+grok:
+  enabled: false
+  auth-file: "~/.grok/auth.json"
+  models:
+    - "grok-4.6"
 ```
 
 `host: ""` resolves to `127.0.0.1`, as does an explicit
@@ -130,6 +136,37 @@ Grok:
 grok login --oauth
 ```
 
+Verify the completed Grok login semantically:
+
+```bash
+grok models
+```
+
+Do not accept the exit status alone as proof. The output must confirm that the
+session is logged in and must not contain `You are not authenticated`,
+`No auth credentials`, or `Failed to fetch models: Auth`. CCPA re-reads a changed
+`grok.auth-file` on the request path, so a fresh OAuth login normally becomes
+available without a restart when the CLI updates the same file resolved by that
+setting. If a different custom auth path already exists, point the configuration
+at the CLI-managed file and restart. Changing `grok.enabled` or `grok.models`
+still requires a service restart, and deploying code changes requires a rebuild
+plus restart. Verify that `GET /admin/accounts` reports `grok.available: true`.
+`GET /v1/models` shows configured model exposure only; confirm it contains
+`grok-4.6` plus any required image model without treating the list as an auth
+check. The default canary accepts `degraded` while checking
+`/admin/accounts.server.provider_status`: Claude and Codex always participate
+in that summary, while Grok participates only when `grok.enabled: true`; a
+Grok-only setup therefore normally remains `degraded`. Use
+`--require-provider-status ok` only when Claude and Codex, plus Grok when
+enabled, must all be ready. Neither mode proves Grok entitlement upstream:
+
+```bash
+npm run canary -- --require-provider-status degraded
+```
+
+This canary can still pass when another provider is available while Grok is
+down, so never skip the explicit `grok.available: true` check above.
+
 Grok support is experimental because the OAuth file is owned by the Grok CLI and
 the entitlement surface can change.
 
@@ -175,6 +212,15 @@ allowlist is `model`, `messages`, `search_parameters`, `stream`, `temperature`,
 `reasoning_effort`, `reasoning`, and `n`. Every other Chat field fails closed
 with HTTP 400 `unsupported_legacy_search_parameter`; `mode: off` removes
 `search_parameters` and continues as an ordinary Chat request.
+Allowed field names still have value constraints: `messages` must be simple
+text, `n` must be omitted or `1`, both token-limit aliases must be positive
+integers and agree when present together, and `reasoning` cannot be combined
+with `reasoning_effort`.
+For these value constraints, malformed message arrays or roles and invalid
+token-limit types or values return HTTP 400 `invalid_parameter`. Values that
+cannot be translated losslessly—non-text or extra message fields such as `name`,
+`n` other than `1`, both reasoning forms, or conflicting token-limit aliases—
+return HTTP 400 `unsupported_legacy_search_parameter`.
 
 Grok Image 2.0 uses the exact model ID `grok-imagine-image-2.0`. Generation is
 available at `POST /v1/images/generations`; JSON image editing is available at
@@ -409,6 +455,13 @@ candidate commit and `release:verify` passes.
   inspect `/admin/accounts` for provider-specific hints.
 - `account_token_expired`: refresh or redo the Claude login.
 - `grok_auth_unavailable` or `grok_auth_expired`: rerun `grok login --oauth`.
+- `410 Live search is deprecated, switch to Agent Tools API`: inspect the actual
+  Chat payload and build identity. Only the documented non-stream
+  `search_parameters` subset is bridged; migrate any other deprecated Live
+  Search shape to native `POST /v1/responses`. In a built deployment, compare
+  `/health.build.git_commit` with `git rev-parse HEAD`, then rebuild and restart
+  if the process is older. If build metadata is absent in development mode,
+  restart that process before reproducing the request.
 - `endpoint_not_implemented`: the endpoint is intentionally outside the current
   CCPA surface.
 - `git_dirty: true` in `/health.build`: the running build was created from a

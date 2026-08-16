@@ -37,7 +37,7 @@ agent execution service.
 | Goal | Endpoint or command | Notes |
 | --- | --- | --- |
 | Discover runtime identity | `GET /health` | Public; no provider or account details |
-| Discover enabled models | `GET /v1/models` | Authenticated; runtime model truth |
+| Discover configured model IDs | `GET /v1/models` | Authenticated; provider readiness is separate |
 | Chat with any enabled provider | `POST /v1/chat/completions` | OpenAI-compatible |
 | Use the Responses API | `POST /v1/responses` | OpenAI-compatible |
 | Generate an image | `POST /v1/images/generations` | Codex or Grok image model |
@@ -87,6 +87,35 @@ npm run login:codex
 grok login --oauth
 ```
 
+For Grok, verify the CLI output instead of trusting its exit status alone:
+
+```bash
+grok models
+```
+
+The command must confirm that the session is logged in and must not print
+`You are not authenticated`, `No auth credentials`, or
+`Failed to fetch models: Auth`.
+CCPA checks the configured Grok auth file mtime on requests, so a fresh OAuth
+file is picked up without restarting the service when the CLI updates the same
+file resolved by `grok.auth-file`. If a different custom auth path already
+exists, point the configuration at the CLI-managed file and restart. Changes to
+`grok.enabled` or `grok.models` are configuration changes and still require a
+restart; code changes require a rebuild and restart. Confirm that
+`GET /admin/accounts` reports `grok.available: true`. `GET /v1/models` shows
+configured model exposure only; confirm it contains `grok-4.6` plus any required
+image model without treating the list as an auth check. The low-cost
+`npm run canary -- --require-provider-status degraded` checks the aggregated
+`/admin/accounts.server.provider_status` and accepts `degraded`. Claude and
+Codex always participate in that summary, while Grok participates only when
+`grok.enabled: true`; a Grok-only setup therefore normally remains `degraded`.
+Use `--require-provider-status ok` only when Claude and Codex, plus Grok when
+enabled, must all be ready. It does not prove Grok entitlement upstream. A
+`degraded` canary can still pass when another provider is available while Grok
+is down, so never skip the explicit `grok.available: true` check. Use a
+deliberately small Grok call only when an end-to-end entitlement check is
+required; that final check spends quota.
+
 Only run the commands for providers you use. For a remote Claude login, use:
 
 ```bash
@@ -131,6 +160,10 @@ curl -fsS "$CCPA_ORIGIN/admin/accounts" \
 Authentication accepts either `Authorization: Bearer <key>` or
 `x-api-key: <key>`. Every `/v1` and `/admin` route requires a configured key.
 `/health` is intentionally unauthenticated.
+
+`GET /v1/models` lists the model IDs exposed by the active configuration; it
+does not prove provider authentication or upstream entitlement. Use
+`GET /admin/accounts` to decide whether a provider is currently available.
 
 ## OpenAI-Compatible Calls
 
@@ -207,6 +240,12 @@ curl -fsS "$CCPA_ORIGIN/v1/responses" \
   }'
 ```
 
+For upstream Agent Tools fields and response annotations, use xAI's current
+[Web Search](https://docs.x.ai/developers/tools/web-search),
+[X Search](https://docs.x.ai/developers/tools/x-search), and
+[Citations](https://docs.x.ai/developers/tools/citations) documentation as the
+schema source of truth.
+
 The deprecated Chat Live Search bridge is intentionally narrower:
 
 - `POST /v1/chat/completions` plus `search_parameters` is bridged only when
@@ -219,6 +258,15 @@ The deprecated Chat Live Search bridge is intentionally narrower:
   `temperature`, `top_p`, `user`, `service_tier`, `max_tokens`,
   `max_completion_tokens`, `reasoning_effort`, `reasoning`, and `n`. Any other
   Chat field fails closed with HTTP 400 `unsupported_legacy_search_parameter`.
+- Allowed field names still have value constraints: `messages` must be simple
+  text, `n` must be omitted or `1`, `max_tokens` and `max_completion_tokens`
+  must be positive integers and agree when both are present, and `reasoning`
+  cannot be combined with `reasoning_effort`.
+- For these value constraints, malformed message arrays or roles and invalid
+  token-limit types or values return HTTP 400 `invalid_parameter`. Values that
+  cannot be translated losslessly—non-text or extra message fields such as
+  `name`, `n` other than `1`, both reasoning forms, or conflicting token-limit
+  aliases—return HTTP 400 `unsupported_legacy_search_parameter`.
 - `mode: auto` and `mode: on` map to Agent Tools `tool_choice`; `mode: off`
   removes `search_parameters` and continues as an ordinary Chat request.
 - Web domain allow/exclude filters, X handle allow/exclude filters, and
@@ -240,6 +288,24 @@ The deprecated Chat Live Search bridge is intentionally narrower:
 Responses is the compatibility-complete surface for Agent Tools output items
 and structured citations. The old bridge maps only the final assistant text,
 deduplicated citation URLs, and usage back into a Chat Completion response.
+
+Use this bridge example only to verify migration of an existing legacy caller;
+new integrations should use the native Responses example above:
+
+```bash
+curl -fsS "$CCPA_ORIGIN/v1/chat/completions" \
+  -H "Authorization: Bearer $CCPA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.6",
+    "messages": [{"role": "user", "content": "What did xAI release this week?"}],
+    "stream": false,
+    "search_parameters": {
+      "mode": "auto",
+      "sources": [{"type": "web", "allowed_websites": ["x.ai"]}]
+    }
+  }'
+```
 
 ### Claude-Native Messages
 
@@ -307,6 +373,9 @@ Image edits require `application/json`: the OpenAI SDK's
 `images.edit()` emits `multipart/form-data`, which xAI does not accept, and CCPA
 does not translate multipart requests in this release. It returns
 `415 unsupported_media_type`; use direct JSON HTTP or an xAI SDK for edits.
+See xAI's current
+[Image Editing](https://docs.x.ai/developers/model-capabilities/images/editing)
+documentation for the upstream JSON field definitions.
 
 ## Agent Runs
 
@@ -448,6 +517,7 @@ All code-writing work must follow the synchronous Claude Code review rule in
 | `403 invalid_api_key` | Active `config.yaml` | Use a key from the config loaded by the running process |
 | `400 unsupported_model` | `GET /v1/models` | Select an exposed model or update provider config and restart |
 | `415 unsupported_media_type` on image edits | Request `Content-Type` | Send the xAI JSON shape with `application/json`; multipart is not converted |
+| `410 Live search is deprecated, switch to Agent Tools API` | Actual Chat payload and build identity | Use native `POST /v1/responses`; only the documented non-stream `search_parameters` subset is bridged. For a built deployment, compare `/health.build.git_commit` with `git rev-parse HEAD`; if build metadata is absent in development mode, restart that process before reproducing the request |
 | Provider unavailable | `GET /admin/accounts` | Follow provider hint; repeat login if expired |
 | `503 agent_runs_disabled` | `admin.accounts.agents.enabled` | Enable Agent Runs and restart only if the trust boundary is acceptable |
 | `503 agent_runner_disabled` | Runner entry in `/admin/accounts` | Enable/install that runner; use an absolute command path for services |

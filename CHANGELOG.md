@@ -4,6 +4,9 @@
 
 ### Highlights
 
+- Expanded the Grok operations documentation with semantic OAuth login checks,
+  auth-file hot reload versus config/build restart boundaries, and actionable
+  migration triage for the deprecated Live Search HTTP 410 response.
 - Added a fail-closed, non-stream compatibility bridge for deprecated Grok Chat
   `search_parameters`. Supported Web/X filters are translated to
   `/v1/responses` Agent Tools and final text, citations, and usage are mapped
@@ -29,6 +32,10 @@
 - `npx tsx --test tests/provider-router.test.ts tests/config.test.ts tests/codex-provider-status.test.ts`
 - `npx tsx --test tests/readme-docs.test.ts tests/upstream-matrix-script.test.ts`
 - `npx tsx --test tests/provider-router.test.ts tests/grok-provider.test.ts tests/config.test.ts`
+- `python3 scripts/check-harness.py`
+- `./scripts/verify.sh`
+- `./scripts/smoke.sh`
+- `npm run secrets:scan`
 - `npm run test:unit`
 - `npm run test:ops`
 - `git diff --check`
