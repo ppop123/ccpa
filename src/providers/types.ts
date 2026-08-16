@@ -21,6 +21,7 @@ export interface Provider {
   handleChatCompletions(): express.RequestHandler;
   handleResponses(): express.RequestHandler;
   handleImageGenerations?(): express.RequestHandler;
+  handleImageEdits?(): express.RequestHandler;
   handleMessages?(): express.RequestHandler;
   handleCountTokens?(): express.RequestHandler;
 }

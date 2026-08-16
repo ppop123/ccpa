@@ -1,5 +1,17 @@
 # CCPA Agent Instructions
 
+This file is the short repository map, not the product manual.
+
+## Start Here
+
+- Read `docs/AGENT_GUIDE.md` to install, configure, call, verify, or troubleshoot
+  CCPA without tracing the implementation.
+- Read `ARCHITECTURE.md` before changing boundaries or data flow.
+- Read `docs/QUALITY.md` for the change-specific verification matrix.
+- Read `docs/README.md` to distinguish current guidance from historical plans.
+- Treat `task_plan.md`, `findings.md`, and `progress.md` as working logs, not
+  runtime truth.
+
 ## Mandatory Claude Review
 
 All code-writing work in this repository must include a synchronous Claude Code

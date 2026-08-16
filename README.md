@@ -18,6 +18,8 @@ It is intentionally not a multi-account pool, billing platform, or generic API g
 
 - [Documentation map](docs/README.md): where to find current usage docs,
   operations runbooks, historical plans, and handoff notes.
+- [Agent guide](docs/AGENT_GUIDE.md): task-oriented setup, API and Agent Runs
+  recipes, verification entrypoints, and failure triage without source tracing.
 - [Operations Guide](docs/CCPA_OPERATIONS_GUIDE.md): detailed deployment,
   endpoint, model-routing, OAuth recovery, rollback, and known-gap reference.
 - [Plan archive](docs/plans/README.md): dated design and stabilization notes.
@@ -28,6 +30,7 @@ It is intentionally not a multi-account pool, billing platform, or generic API g
 - supports `POST /v1/chat/completions`
 - supports `POST /v1/responses`
 - supports `POST /v1/images/generations`
+- supports Grok JSON image editing at `POST /v1/images/edits`
 - optionally supports Agent Runs for uploaded file bundles through local CLI agents
 - supports `GET /v1/models`
 - supports Claude native `POST /v1/messages` and `POST /v1/messages/count_tokens`
@@ -119,8 +122,10 @@ grok:
   auth-file: "~/.grok/auth.json"
   base-url: "https://api.x.ai/v1"
   models:
+    - "grok-4.6"
     - "grok-4.5"
     - "grok-4.3"
+    - "grok-imagine-image-2.0"
 
 agents:
   enabled: false
@@ -173,7 +178,8 @@ grok login --oauth
 ```
 
 Then enable `grok.enabled` and list the Grok model IDs you want to expose in `grok.models`.
-Existing installs must add new model IDs such as `grok-4.5` to their local `config.yaml` before calling them.
+Existing installs must add new model IDs such as `grok-4.6` and
+`grok-imagine-image-2.0` to their local `config.yaml` before calling them.
 
 If only one provider is logged in, the server still starts and only exposes that side. `/admin/accounts` shows what is missing.
 
@@ -214,6 +220,48 @@ resp = client.chat.completions.create(
 
 print(resp.choices[0].message.content)
 ```
+
+### Grok Agent Tools search
+
+Use `POST /v1/responses` for current Grok search. CCPA passes native Agent Tools
+requests and their typed outputs/citations through unchanged:
+
+```bash
+curl http://127.0.0.1:8317/v1/responses \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.6",
+    "input": "What did xAI release this week? Cite current sources.",
+    "tools": [
+      {"type": "web_search", "filters": {"allowed_domains": ["x.ai"]}},
+      {"type": "x_search", "allowed_x_handles": ["xai"]}
+    ],
+    "tool_choice": "auto",
+    "stream": false
+  }'
+```
+
+CCPA also provides a fail-closed compatibility bridge for deprecated
+`POST /v1/chat/completions` requests that still send `search_parameters`. The
+bridge covers non-stream Web/X search, supported domain/handle filters,
+X-only date filters, and citation control, then maps the final answer back to
+Chat Completions. Because Agent Tools Web Search has no date filter, legacy
+dates combined with Web Search fail closed with HTTP 400.
+Requests with `stream: true` return HTTP 400
+`legacy_live_search_streaming_unsupported`; legacy-only fields such as
+`max_search_results`, `news`, `rss`, `country`, or `safe_search` return HTTP 400
+`unsupported_legacy_search_parameter` instead of silently changing behavior.
+Legacy `return_citations: false` sends `include: ["no_inline_citations"]` so xAI
+removes inline citation links, and the mapped Chat response omits top-level
+`citations`. Migrate unsupported callers to Responses Agent Tools.
+When `mode: auto` or `mode: on` activates the bridge, its complete top-level
+Chat allowlist is `model`, `messages`, `search_parameters`, `stream`,
+`temperature`, `top_p`, `user`, `service_tier`, `max_tokens`,
+`max_completion_tokens`, `reasoning_effort`, `reasoning`, and `n`; every other
+Chat field fails closed with HTTP 400 `unsupported_legacy_search_parameter`.
+`mode: off` removes `search_parameters` and continues as an ordinary Chat
+request.
 
 ### Local shell helper
 
@@ -262,7 +310,7 @@ temporary uploaded-file workspace. Use `GET /v1/agent-runs/:id` for status,
 `POST /v1/agent-runs/:id/cancel` to cancel, and
 `GET /v1/agent-runs/:id/artifacts` to download `artifacts.tar.gz`.
 
-### Image generation
+### Image generation and editing
 
 `gpt-image-2` uses the same Codex OAuth login as Codex chat models and is exposed
 through the OpenAI-compatible Images API. The external `gpt-image-2` name is a
@@ -281,6 +329,49 @@ curl http://127.0.0.1:8317/v1/images/generations \
     "response_format": "b64_json"
   }'
 ```
+
+`grok-imagine-image-2.0` is xAI's exact Image 2.0 model ID. Add it to
+`grok.models`, then use JSON requests for both generation and editing. Generation
+supports up to 10 outputs, `1k` or `2k` resolution, and generation-only
+`quality: "low" | "medium"` (`medium` by default).
+
+```bash
+curl http://127.0.0.1:8317/v1/images/generations \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-image-2.0",
+    "prompt": "A glass greenhouse at sunrise",
+    "aspect_ratio": "16:9",
+    "resolution": "2k",
+    "quality": "medium"
+  }'
+```
+
+For editing, send one `image` or an `images` array of up to three source images.
+An `image_url` may use a public URL or a base64 data URI. CCPA forwards the
+complete JSON body and xAI response without changing image fields:
+
+```bash
+curl http://127.0.0.1:8317/v1/images/edits \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-image-2.0",
+    "prompt": "Render this as a detailed pencil sketch",
+    "image": {
+      "type": "image_url",
+      "url": "https://example.com/source.png"
+    },
+    "response_format": "url"
+  }'
+```
+
+Grok editing is JSON-only. The OpenAI SDK's `images.edit()` sends
+`multipart/form-data`, while xAI requires `application/json`; CCPA does not
+convert that multipart request in this release and returns
+`415 unsupported_media_type`. Use direct JSON HTTP or an xAI SDK for edits.
+OpenAI SDK `images.generate()` remains usable for generation.
 
 ## Models
 
@@ -319,6 +410,7 @@ Important runtime rules:
 | `POST /v1/chat/completions` | OpenAI-compatible chat |
 | `POST /v1/responses` | OpenAI-compatible responses |
 | `POST /v1/images/generations` | OpenAI-compatible image generations through Codex or Grok OAuth |
+| `POST /v1/images/edits` | JSON image editing through Grok OAuth; no multipart conversion |
 | `POST /v1/agent-runs` | Optional uploaded-file CLI agent run |
 | `GET /v1/agent-runs/:id` | Agent run status and result |
 | `POST /v1/agent-runs/:id/cancel` | Cancel a running agent run |

@@ -59,8 +59,10 @@ codex:
     - "gpt-5.6"
 ```
 
-`host: ""` listens on all interfaces. For a strictly local process, set
-`host: "127.0.0.1"`.
+`host: ""` resolves to `127.0.0.1`, as does an explicit
+`host: "127.0.0.1"`. To listen on a LAN, configure a concrete bind address such
+as `0.0.0.0` and keep the service behind an appropriate trusted-network
+boundary.
 
 Local rate limiting is disabled by default for single-operator workflows. Enable
 `rate-limit.enabled: true` before exposing the service to untrusted clients.
@@ -130,6 +132,71 @@ grok login --oauth
 
 Grok support is experimental because the OAuth file is owned by the Grok CLI and
 the entitlement surface can change.
+
+## Grok Search And Images
+
+New Grok search integrations should use native Agent Tools through
+`POST /v1/responses`. CCPA passes the Responses request and its typed search
+outputs and citations through unchanged:
+
+```bash
+curl http://127.0.0.1:8317/v1/responses \
+  -H "Authorization: Bearer <configured-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.6",
+    "input": "What did xAI release this week? Cite current sources.",
+    "tools": [
+      {"type": "web_search", "filters": {"allowed_domains": ["x.ai"]}},
+      {"type": "x_search", "allowed_x_handles": ["xai"]}
+    ],
+    "tool_choice": "auto",
+    "stream": false
+  }'
+```
+
+The deprecated `POST /v1/chat/completions` `search_parameters` bridge is a
+fail-closed compatibility path for non-stream Web/X requests. Supported filters
+are translated to Responses Agent Tools and the final answer is mapped back to a
+Chat Completion. Legacy `return_citations: false` adds
+`include: ["no_inline_citations"]`, asking xAI to remove inline citation links;
+the mapped Chat response also omits top-level `citations`. Requests with
+`stream: true` return HTTP 400 `legacy_live_search_streaming_unsupported`.
+Legacy `from_date` and `to_date` are accepted only when X is the sole source;
+Agent Tools Web Search has no date filter, so dates combined with Web Search
+return HTTP 400 rather than changing the requested scope.
+Fields without a lossless mapping, including `max_search_results`, separate
+`news` or `rss` sources, `country`, and `safe_search`, return HTTP 400
+`unsupported_legacy_search_parameter`. Migrate those requests to native Agent
+Tools rather than dropping fields.
+For active `mode: auto` or `mode: on` bridging, the complete top-level Chat
+allowlist is `model`, `messages`, `search_parameters`, `stream`, `temperature`,
+`top_p`, `user`, `service_tier`, `max_tokens`, `max_completion_tokens`,
+`reasoning_effort`, `reasoning`, and `n`. Every other Chat field fails closed
+with HTTP 400 `unsupported_legacy_search_parameter`; `mode: off` removes
+`search_parameters` and continues as an ordinary Chat request.
+
+Grok Image 2.0 uses the exact model ID `grok-imagine-image-2.0`. Generation is
+available at `POST /v1/images/generations`; JSON image editing is available at
+`POST /v1/images/edits`:
+
+```bash
+curl http://127.0.0.1:8317/v1/images/edits \
+  -H "Authorization: Bearer <configured-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-image-2.0",
+    "prompt": "Render this as a detailed pencil sketch",
+    "image": {
+      "type": "image_url",
+      "url": "https://example.com/source.png"
+    }
+  }'
+```
+
+Editing requires `application/json`. OpenAI SDK `images.edit()` requests use
+`multipart/form-data`; CCPA does not convert them and returns
+`415 unsupported_media_type`. Use direct JSON HTTP or an xAI SDK for edits.
 
 ## Running
 

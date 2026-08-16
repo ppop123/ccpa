@@ -4,6 +4,18 @@
 
 ### Highlights
 
+- Added a fail-closed, non-stream compatibility bridge for deprecated Grok Chat
+  `search_parameters`. Supported Web/X filters are translated to
+  `/v1/responses` Agent Tools and final text, citations, and usage are mapped
+  back to Chat Completions. Native `web_search`/`x_search` Responses requests
+  remain passthrough; streaming and lossy legacy-only fields return HTTP 400
+  migration guidance.
+- Added the official `grok-imagine-image-2.0` model ID, full JSON generation
+  passthrough coverage, and Grok-only `POST /v1/images/edits` JSON forwarding for
+  single- and multi-image edits, including upstream error and request-outcome
+  tracking. Multipart edit requests are rejected explicitly with HTTP 415.
+- Added the official `grok-4.6` model ID to the Grok example configuration and
+  docs, with upgrade notes for existing local `config.yaml` files.
 - Added the official GPT-5.6 Codex/OpenAI model family to the Codex example
   configuration and docs: `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, and
   `gpt-5.6-luna`, with upgrade notes for existing local `config.yaml` files.

@@ -6,9 +6,15 @@ planning context.
 
 ## Start Here
 
+- [Agent Guide](AGENT_GUIDE.md): task-oriented setup, API recipes, Agent Runs
+  contract, verification entrypoints, and failure playbook for coding agents.
 - [Project README](../README.md): quick setup, supported endpoints, model
   routing, monitoring, canary, rollout, and release verification commands.
 - [中文 README](../README_CN.md): Chinese quick-start and operations summary.
+- [Architecture](../ARCHITECTURE.md): implementation layers, request flows,
+  state, trust boundaries, and extension points.
+- [Quality and verification](QUALITY.md): change-risk verification matrix and
+  mutation/quota boundaries.
 - [Operations Guide](CCPA_OPERATIONS_GUIDE.md): detailed runbook for local and
   50.9 deployments, endpoint behavior, model routing, OAuth recovery, logs,
   rollback, and known gaps.
@@ -20,10 +26,9 @@ planning context.
 
 ## Current Versus Historical
 
-Treat the README files and the top "current status" section of the Operations
-Guide as the best human-readable source for current usage. For live runtime
-truth, verify with the canary and release gates instead of relying on dated
-text:
+Treat the Agent Guide, README files, and the Operations Guide as the stable
+human-readable source for current usage. For live runtime truth, use discovery
+endpoints and verification gates instead of relying on dated text:
 
 ```bash
 npm run canary -- --require-provider-status ok --require-build-commit "$(git rev-parse HEAD)"

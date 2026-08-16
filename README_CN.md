@@ -17,6 +17,7 @@ Claude + Codex + Grok Proxy API
 ## 文档
 
 - [文档地图](docs/README.md)：快速判断当前使用文档、运维 runbook、历史计划和 handoff 笔记分别在哪里。
+- [Agent 使用指南](docs/AGENT_GUIDE.md)：按任务整理安装、API/Agent Runs 调用、验证入口和故障排查，正常使用无需翻源码。
 - [运维指南](docs/CCPA_OPERATIONS_GUIDE.md)：详细部署、端点、模型路由、OAuth 恢复、回滚和已知问题参考。
 - [计划归档](docs/plans/README.md)：按日期保存的设计、实现和稳定性修复记录。
 
@@ -26,6 +27,7 @@ Claude + Codex + Grok Proxy API
 - 支持 `POST /v1/chat/completions`
 - 支持 `POST /v1/responses`
 - 支持 `POST /v1/images/generations`
+- 支持 Grok JSON 图片编辑接口 `POST /v1/images/edits`
 - 可选支持 Agent Runs：上传文件包后调用本机 CLI agent 处理
 - 支持 `GET /v1/models`
 - 支持 Claude 原生 `POST /v1/messages` 和 `POST /v1/messages/count_tokens`
@@ -115,8 +117,10 @@ grok:
   auth-file: "~/.grok/auth.json"
   base-url: "https://api.x.ai/v1"
   models:
+    - "grok-4.6"
     - "grok-4.5"
     - "grok-4.3"
+    - "grok-imagine-image-2.0"
 
 agents:
   enabled: false
@@ -169,7 +173,8 @@ grok login --oauth
 ```
 
 然后在 `config.yaml` 里打开 `grok.enabled`，并把要暴露的 Grok 模型写进 `grok.models`。
-已有安装也需要先把 `grok-4.5` 这类新模型 ID 加到本地 `config.yaml` 的 `grok.models` 里再调用。
+已有安装也需要先把 `grok-4.6`、`grok-imagine-image-2.0` 这类新模型 ID
+加到本地 `config.yaml` 的 `grok.models` 里再调用。
 
 如果当前只登录了一边 provider，服务仍然可以启动，只是另一边模型不可用；缺失信息会在 `/admin/accounts` 里直接提示。
 
@@ -210,6 +215,45 @@ resp = client.chat.completions.create(
 
 print(resp.choices[0].message.content)
 ```
+
+### Grok Agent Tools 搜索
+
+当前 Grok 搜索推荐直接调用 `POST /v1/responses`。CCPA 会原样透传 Agent
+Tools 请求以及带引用的 typed output：
+
+```bash
+curl http://127.0.0.1:8317/v1/responses \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.6",
+    "input": "xAI 本周发布了什么？请引用最新来源。",
+    "tools": [
+      {"type": "web_search", "filters": {"allowed_domains": ["x.ai"]}},
+      {"type": "x_search", "allowed_x_handles": ["xai"]}
+    ],
+    "tool_choice": "auto",
+    "stream": false
+  }'
+```
+
+对于仍在 `POST /v1/chat/completions` 里发送 `search_parameters` 的旧调用方，
+CCPA 提供失败关闭的兼容桥接：非流式 Web/X 搜索、可映射的域名/账号过滤、仅 X
+来源的日期过滤和引用控制会转成 Responses，再把最终答案映回 Chat Completions。
+由于 Agent Tools Web Search 没有日期过滤，日期与 Web Search 同时出现时会在本地
+返回 HTTP 400。`stream: true`
+会返回 HTTP 400 `legacy_live_search_streaming_unsupported`；
+`max_search_results`、`news`、`rss`、`country`、`safe_search` 等无法无损映射的
+旧字段会返回 HTTP 400 `unsupported_legacy_search_parameter`，不会静默丢语义。
+旧请求设置 `return_citations: false` 时，桥接会发送
+`include: ["no_inline_citations"]`，要求 xAI 移除正文里的引用链接，并且映射后的
+Chat 响应不会返回顶层 `citations`。不支持的调用请迁移到 Responses Agent Tools。
+当 `mode: auto` 或 `mode: on` 启用桥接时，顶层 Chat 字段只允许 `model`、
+`messages`、`search_parameters`、`stream`、`temperature`、`top_p`、`user`、
+`service_tier`、`max_tokens`、`max_completion_tokens`、`reasoning_effort`、
+`reasoning` 和 `n`；其他 Chat 字段会失败关闭并返回 HTTP 400
+`unsupported_legacy_search_parameter`。`mode: off` 会移除 `search_parameters`，
+然后按普通 Chat 请求继续处理。
 
 ### 本机 shell 包装脚本
 
@@ -256,7 +300,7 @@ P1 支持 `claude-code`、`codex-cli`、`grok-cli`。模式支持 `read-only` �
 查状态，用 `POST /v1/agent-runs/:id/cancel` 取消，用
 `GET /v1/agent-runs/:id/artifacts` 下载 `artifacts.tar.gz`。
 
-### 生图
+### 生图与图片编辑
 
 `gpt-image-2` 复用同一份 Codex OAuth 登录态，并通过 OpenAI 兼容的 Images API 暴露。
 这里的 `gpt-image-2` 是对外兼容名；内部会用 `gpt-5.5` 搭配 `image_generation`
@@ -273,6 +317,48 @@ curl http://127.0.0.1:8317/v1/images/generations \
     "response_format": "b64_json"
   }'
 ```
+
+`grok-imagine-image-2.0` 是 xAI Image 2.0 的精确模型 ID。把它加入
+`grok.models` 后，可用 JSON 请求生成和编辑图片。生成接口单次最多返回 10 张，
+支持 `1k`、`2k` 分辨率；`quality: "low" | "medium"` 只用于生成，默认
+`medium`。
+
+```bash
+curl http://127.0.0.1:8317/v1/images/generations \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-image-2.0",
+    "prompt": "A glass greenhouse at sunrise",
+    "aspect_ratio": "16:9",
+    "resolution": "2k",
+    "quality": "medium"
+  }'
+```
+
+编辑时可传一个 `image`，或最多三个源图组成的 `images` 数组。`image_url`
+可以使用公开 URL 或 base64 data URI。CCPA 会原样转发完整 JSON 请求和 xAI
+响应，不改写图片字段：
+
+```bash
+curl http://127.0.0.1:8317/v1/images/edits \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-image-2.0",
+    "prompt": "Render this as a detailed pencil sketch",
+    "image": {
+      "type": "image_url",
+      "url": "https://example.com/source.png"
+    },
+    "response_format": "url"
+  }'
+```
+
+Grok 图片编辑仅支持 JSON。OpenAI SDK 的 `images.edit()` 会发送
+`multipart/form-data`，而 xAI 要求 `application/json`；当前版本的 CCPA
+不会转换这类 multipart 请求，并返回 `415 unsupported_media_type`。编辑请使用
+直接 JSON HTTP 或 xAI SDK；生成仍可使用 OpenAI SDK 的 `images.generate()`。
 
 ## 模型规则
 
@@ -311,6 +397,7 @@ Grok 模型只来自 `grok.models`，并且需要 `grok.enabled: true`。
 | `POST /v1/chat/completions` | OpenAI 兼容聊天接口 |
 | `POST /v1/responses` | OpenAI 兼容 responses 接口 |
 | `POST /v1/images/generations` | 通过 Codex 或 Grok OAuth 生成图片的 OpenAI 兼容接口 |
+| `POST /v1/images/edits` | 通过 Grok OAuth 编辑图片的 JSON 接口；不转换 multipart |
 | `POST /v1/agent-runs` | 可选的上传文件包 CLI agent 执行接口 |
 | `GET /v1/agent-runs/:id` | Agent run 状态和结果 |
 | `POST /v1/agent-runs/:id/cancel` | 取消正在运行的 agent run |

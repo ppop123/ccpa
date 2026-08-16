@@ -286,6 +286,54 @@ test("Codex chat completions sends bearer token upstream and canonicalizes chat 
   assert.equal(resp.body.usage.total_tokens, 20);
 });
 
+test("Codex chat completions maps chat max token aliases to Responses", async (t) => {
+  const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-max-tokens-"));
+  const authFile = path.join(authDir, ".codex", "auth.json");
+  writeAuth(authFile, "codex-access-token");
+  const provider = new CodexProvider(makeConfig(authDir, authFile));
+  const calls: Array<{ body: any }> = [];
+
+  const restoreFetch = global.fetch;
+  global.fetch = (async (_input, init) => {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ body });
+
+    return makeStreamResponse([
+      "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":1}\n\n",
+      "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":2,\"text\":\"ok\"}\n\n",
+      "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":3,\"response\":{\"status\":\"completed\",\"model\":\"gpt-5.5\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n",
+      "event: response.done\ndata: {\"type\":\"response.done\",\"sequence_number\":4}\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const server = await startApp(provider.handleChatCompletions());
+
+  t.after(async () => {
+    global.fetch = restoreFetch;
+    await stopApp(server);
+    fs.rmSync(authDir, { recursive: true, force: true });
+  });
+
+  const resp = await requestJson({
+    server,
+    method: "POST",
+    path: "/v1/chat/completions",
+    headers: { Authorization: "Bearer test-key" },
+    body: {
+      model: "gpt-5.4",
+      messages: [{ role: "user", content: "hello" }],
+      max_tokens: 120,
+      stream: false,
+    },
+  });
+
+  assert.equal(resp.status, 200);
+  assert.equal(resp.body.choices[0].message.content, "ok");
+  assert.equal(calls[0]?.body.max_tokens, undefined);
+  assert.equal(calls[0]?.body.max_completion_tokens, undefined);
+  assert.equal(calls[0]?.body.max_output_tokens, 120);
+});
+
 test("Codex chat completions preserves response.output_text.done text without deltas", async (t) => {
   const authDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccpa-codex-chat-output-text-done-"));
   const authFile = path.join(authDir, ".codex", "auth.json");

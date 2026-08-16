@@ -24,8 +24,10 @@ test("config.example.yaml exposes current Grok model IDs", () => {
   const example = yaml.load(fs.readFileSync(examplePath, "utf-8")) as any;
 
   assert.ok(Array.isArray(example.grok?.models));
+  assert.ok(example.grok.models.includes("grok-4.6"));
   assert.ok(example.grok.models.includes("grok-4.5"));
   assert.ok(example.grok.models.includes("grok-4.3"));
+  assert.ok(example.grok.models.includes("grok-imagine-image-2.0"));
 });
 
 test("loadConfig uses ccpa auth dir for new default configs", () => {

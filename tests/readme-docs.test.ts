@@ -63,6 +63,46 @@ test("README files point to the documentation map", () => {
   assert.match(docsReadme, /\[Plan archive\]\(plans\/README\.md\)/);
 });
 
+test("repository entrypoints link to the agent usage guide", () => {
+  const agents = readRepoFile("AGENTS.md");
+  const englishReadme = readRepoFile("README.md");
+  const chineseReadme = readRepoFile("README_CN.md");
+  const docsReadme = readRepoFile("docs/README.md");
+  const agentGuide = readRepoFile("docs/AGENT_GUIDE.md");
+
+  assert.match(agents, /docs\/AGENT_GUIDE\.md/);
+  assert.match(englishReadme, /\[Agent guide\]\(docs\/AGENT_GUIDE\.md\)/);
+  assert.match(chineseReadme, /\[Agent 使用指南\]\(docs\/AGENT_GUIDE\.md\)/);
+  assert.match(docsReadme, /\[Agent Guide\]\(AGENT_GUIDE\.md\)/);
+  assert.match(agentGuide, /GET \/v1\/models/);
+  assert.match(agentGuide, /POST \/v1\/agent-runs/);
+});
+
+test("stable harness docs contain project-specific guidance", () => {
+  for (const fileName of ["ARCHITECTURE.md", "docs/QUALITY.md"]) {
+    const body = readRepoFile(fileName);
+    assert.doesNotMatch(body, /Document the app shell|Capture the high-value|Record what/);
+  }
+});
+
+test("operations guide documents the actual empty-host binding", () => {
+  const operationsGuide = readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md");
+
+  assert.match(operationsGuide, /`host: ""` resolves to `127\.0\.0\.1`/);
+  assert.doesNotMatch(operationsGuide, /`host: ""` listens on all interfaces/);
+});
+
+test("agent docs state Agent Runs discovery and retention limits precisely", () => {
+  const agentGuide = readRepoFile("docs/AGENT_GUIDE.md");
+  const architecture = readRepoFile("ARCHITECTURE.md");
+
+  assert.doesNotMatch(agentGuide, /runner readiness/i);
+  assert.match(agentGuide, /does not probe\s+whether a runner command exists/i);
+  assert.match(agentGuide, /only the selected limits\s+exposed by `GET \/admin\/accounts`/i);
+  assert.match(agentGuide, /internal `\.\.` segments may normalize away/i);
+  assert.match(architecture, /does not scan run directories left by an earlier\s+process/i);
+});
+
 test("README Grok model examples stay aligned with the example config", () => {
   const exampleConfig = yaml.load(readRepoFile("config.example.yaml")) as any;
   const englishReadme = readRepoFile("README.md");
@@ -74,8 +114,57 @@ test("README Grok model examples stay aligned with the example config", () => {
   assert.ok(englishModels.length > 0);
   assert.ok(chineseModels.length > 0);
   assert.deepEqual(englishModels, chineseModels);
+  assert.ok(englishModels.includes("grok-4.6"));
   assert.ok(englishModels.includes("grok-4.5"));
+  assert.ok(englishModels.includes("grok-imagine-image-2.0"));
   assert.ok(englishModels.every((model) => configuredModels.has(model)));
+});
+
+test("image docs cover Grok Image 2.0 generation and JSON-only editing", () => {
+  const docs = [
+    readRepoFile("README.md"),
+    readRepoFile("README_CN.md"),
+    readRepoFile("docs/AGENT_GUIDE.md"),
+    readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"),
+  ];
+
+  for (const body of docs) {
+    assert.match(body, /grok-imagine-image-2\.0/);
+    assert.match(body, /POST \/v1\/images\/generations/);
+    assert.match(body, /POST \/v1\/images\/edits/);
+    assert.match(body, /application\/json/);
+    assert.match(body, /multipart\/form-data/);
+    assert.match(body, /415 unsupported_media_type/);
+  }
+});
+
+test("Grok search docs prefer Responses Agent Tools and state legacy bridge limits", () => {
+  const docs = [
+    readRepoFile("README.md"),
+    readRepoFile("README_CN.md"),
+    readRepoFile("docs/AGENT_GUIDE.md"),
+    readRepoFile("docs/CCPA_OPERATIONS_GUIDE.md"),
+  ];
+
+  for (const body of docs) {
+    assert.match(body, /POST \/v1\/responses/);
+    assert.match(body, /"type":\s*"web_search"/);
+    assert.match(body, /"type":\s*"x_search"/);
+    assert.match(body, /search_parameters/);
+    assert.match(body, /max_search_results/);
+    assert.match(body, /return_citations/);
+    assert.match(body, /no_inline_citations/);
+    assert.match(body, /stream:\s*true/);
+    assert.match(body, /HTTP 400|400/);
+  }
+
+  const agentGuide = docs[2];
+  assert.match(agentGuide, /return_citations/);
+  assert.match(agentGuide, /news/);
+  assert.match(agentGuide, /rss/);
+  assert.match(agentGuide, /safe_search/);
+  assert.match(agentGuide, /legacy_live_search_streaming_unsupported/);
+  assert.match(agentGuide, /unsupported_legacy_search_parameter/);
 });
 
 test("README Codex model examples stay aligned with the example config", () => {

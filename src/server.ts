@@ -442,6 +442,52 @@ export function createServer(config: Config, manager: AccountManager): express.A
       }
     )
   );
+  app.post(
+    "/v1/images/edits",
+    wrapTrackedHandler(
+      usageTracker,
+      {
+        endpoint: "POST /v1/images/edits",
+        provider: (req) => resolveUsageProvider(resolveProviderFromModel(req.body?.model)),
+      },
+      (req, res, next) => {
+        if (!req.is("application/json")) {
+          const message =
+            "Image edits require Content-Type: application/json; multipart/form-data is not supported";
+          setFailureContext(res, {
+            stage: "validation",
+            kind: "unsupported_media_type",
+            message,
+          });
+          res.status(415).json(invalidRequest(message, "unsupported_media_type"));
+          return;
+        }
+
+        const model = req.body?.model;
+        if (typeof model !== "string" || model.trim().length === 0) {
+          setFailureContext(res, {
+            stage: "validation",
+            kind: "missing_model",
+            message: "model is required",
+          });
+          res.status(400).json(invalidRequest("model is required", "missing_required_parameter"));
+          return;
+        }
+
+        if (!grokProvider.supportsImageEdits(model)) {
+          setFailureContext(res, {
+            stage: "routing",
+            kind: "unsupported_model",
+            message: `Unsupported model: ${String(model)}`,
+          });
+          res.status(400).json(invalidRequest(`Unsupported model: ${String(model)}`, "unsupported_model"));
+          return;
+        }
+
+        grokProvider.handleImageEdits()(req, res, next);
+      }
+    )
+  );
 
   // Routes — Claude native passthrough
   app.post(
